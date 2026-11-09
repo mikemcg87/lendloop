@@ -1,20 +1,30 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalQuery } from "./_generated/server";
-import { requestStatusValidator } from "./lib/domain";
+import { requestStatusValidator, type RequestStatus } from "./lib/domain";
 import { sign } from "./lib/hmac";
 
 const MAX_ATTEMPTS = 5;
 
+// Everything n8n receives. Deliberately minimal: one recipient, and only the
+// other party's display name. No ids beyond the request, no second email.
 type Payload = {
   eventId: string;
-  event: string;
-  occurredAt: number;
-  request: { id: string; startDate: string; endDate: string };
-  tool: { id: string; name: string } | null;
-  owner: { name: string; email?: string } | null;
-  borrower: { name: string; email?: string } | null;
+  event: RequestStatus;
+  // Set at send time and covered by the signature, so the receiver can
+  // reject replays of an old request.
+  sentAt?: number;
+  requestId: string;
+  recipient: { name: string; email?: string };
+  counterpartName: string;
+  toolName: string;
+  startDate: string;
+  endDate: string;
 };
+
+// The owner hears about new and withdrawn requests; the borrower hears about
+// every decision made on theirs.
+const OWNER_IS_RECIPIENT: RequestStatus[] = ["requested", "cancelled"];
 
 export const payload = internalQuery({
   args: { requestId: v.id("requests"), event: requestStatusValidator },
@@ -26,20 +36,21 @@ export const payload = internalQuery({
       ctx.db.get(request.ownerId),
       ctx.db.get(request.borrowerId),
     ]);
+    if (!owner || !borrower) return null;
+    const toOwner = OWNER_IS_RECIPIENT.includes(args.event);
+    const recipient = toOwner ? owner : borrower;
+    const counterpart = toOwner ? borrower : owner;
     return {
       // Each status is reached at most once per request, so this is a stable
       // idempotency key for the receiver across retries.
       eventId: `${request._id}:${args.event}`,
       event: args.event,
-      occurredAt: Date.now(),
-      request: {
-        id: request._id,
-        startDate: request.startDate,
-        endDate: request.endDate,
-      },
-      tool: tool && { id: tool._id, name: tool.name },
-      owner: owner && { name: owner.name, email: owner.email },
-      borrower: borrower && { name: borrower.name, email: borrower.email },
+      requestId: request._id,
+      recipient: { name: recipient.name, email: recipient.email },
+      counterpartName: counterpart.name,
+      toolName: tool?.name ?? "a tool",
+      startDate: request.startDate,
+      endDate: request.endDate,
     };
   },
 });
@@ -65,17 +76,16 @@ export const dispatch = internalAction({
     );
     if (!data) return;
 
-    const body = JSON.stringify(data);
-    const timestamp = Date.now().toString();
+    // The signature covers the exact bytes sent, so the receiver verifies
+    // against the raw body without re-serialising anything.
+    const body = JSON.stringify({ ...data, sentAt: Date.now() });
     let failure: string | null = null;
     try {
       const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-LendLoop-Timestamp": timestamp,
-          "X-LendLoop-Signature": await sign(secret, `${timestamp}.${body}`),
-          "X-LendLoop-Event-Id": data.eventId,
+          "X-LendLoop-Signature": await sign(secret, body),
         },
         body,
       });

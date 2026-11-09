@@ -1,11 +1,12 @@
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 
 const BATCH = 500;
 
 // Loans that need a reminder on `today`: accepted loans past their end date
-// plus loans already marked overdue, minus any already reminded today.
+// plus loans already marked overdue, minus any already claimed today.
+// Returns only what the reminder needs: the borrower's contact, the tool and
+// owner names, and the due date.
 export const listDue = internalQuery({
   args: { today: v.string() },
   handler: async (ctx, { today }) => {
@@ -25,7 +26,7 @@ export const listDue = internalQuery({
       (request) => request.lastReminderDate !== today,
     );
     return await Promise.all(
-      due.map(async (request: Doc<"requests">) => {
+      due.map(async (request) => {
         const [tool, owner, borrower] = await Promise.all([
           ctx.db.get(request.toolId),
           ctx.db.get(request.ownerId),
@@ -36,35 +37,38 @@ export const listDue = internalQuery({
           runDate: today,
           endDate: request.endDate,
           toolName: tool?.name ?? "a tool",
-          owner: { name: owner?.name, email: owner?.email },
-          borrower: { name: borrower?.name, email: borrower?.email },
+          ownerName: owner?.name ?? "your neighbour",
+          borrower: { name: borrower?.name ?? "", email: borrower?.email },
         };
       }),
     );
   },
 });
 
-// Idempotent per (requestId, runDate): replaying the same write-back is a
-// no-op, and a loan that was returned in the meantime is left alone.
-export const mark = internalMutation({
+// Claims today's reminder for a loan and flips it to overdue. Idempotent per
+// (requestId, runDate): only the first call returns `claimed: true`, so a
+// retried or re-run workflow never sends a second reminder for the same day.
+// A loan returned in the meantime is left alone.
+export const claimReminder = internalMutation({
   args: { requestId: v.string(), runDate: v.string() },
   handler: async (ctx, { requestId, runDate }) => {
     const id = ctx.db.normalizeId("requests", requestId);
     const request = id && (await ctx.db.get(id));
-    if (!request) return "not_found" as const;
-    if (request.lastReminderDate === runDate) return "already_processed" as const;
-
+    if (!request) return { claimed: false, result: "not_found" as const };
+    if (request.lastReminderDate === runDate) {
+      return { claimed: false, result: "already_claimed" as const };
+    }
     if (request.status === "accepted" && request.endDate < runDate) {
       await ctx.db.patch(request._id, {
         status: "overdue",
         lastReminderDate: runDate,
       });
-      return "marked_overdue" as const;
+      return { claimed: true, result: "marked_overdue" as const };
     }
     if (request.status === "overdue") {
       await ctx.db.patch(request._id, { lastReminderDate: runDate });
-      return "reminder_recorded" as const;
+      return { claimed: true, result: "still_overdue" as const };
     }
-    return "not_overdue" as const;
+    return { claimed: false, result: "not_overdue" as const };
   },
 });

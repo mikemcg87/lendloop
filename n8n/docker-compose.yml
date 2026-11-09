@@ -1,0 +1,45 @@
+# Local n8n for LendLoop, plus a mock notification sink that just logs what it
+# receives. Run from the repo root:
+#
+#   cp n8n/.env.example n8n/.env      # then fill in N8N_WEBHOOK_SECRET
+#   docker compose -f n8n/docker-compose.yml up -d
+#
+# See the README for importing and activating the workflows.
+
+services:
+  n8n:
+    image: n8nio/n8n:2.46.7
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      # The workflows read their configuration with $env. Nothing secret is
+      # stored in the exported workflow JSON.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      LENDLOOP_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:?Set N8N_WEBHOOK_SECRET in n8n/.env}
+      LENDLOOP_CONVEX_SITE_URL: ${LENDLOOP_CONVEX_SITE_URL:-http://host.docker.internal:3211}
+      LENDLOOP_NOTIFY_SINK_URL: ${LENDLOOP_NOTIFY_SINK_URL:-http://notification-sink:8080/notify}
+      LENDLOOP_ALERT_URL: ${LENDLOOP_ALERT_URL:-http://notification-sink:8080/alert}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Europe/London}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+    extra_hosts:
+      # Lets the container reach a Convex backend running on the host.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+    depends_on:
+      - notification-sink
+
+  # Stand-in for Slack / Discord / an email API: echoes every request it gets
+  # to its log. Read it with:
+  #   docker compose -f n8n/docker-compose.yml logs -f notification-sink
+  notification-sink:
+    image: mendhak/http-https-echo:37
+    restart: unless-stopped
+    environment:
+      HTTP_PORT: "8080"
+
+volumes:
+  n8n_data:

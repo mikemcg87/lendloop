@@ -1,46 +1,59 @@
 {
+  "id": "lendloopNotify01",
   "name": "LendLoop 1: Request status notifications",
   "nodes": [
     {
       "parameters": {
-        "content": "## LendLoop: request status notifications\n\nConvex POSTs here whenever a borrow request changes status (requested, accepted, rejected, returned, cancelled).\n\n1. Recompute the HMAC over `timestamp.body` and reject anything unsigned or older than 5 minutes (401).\n2. Acknowledge with 202 straight away so Convex stops retrying.\n3. Drop events already seen (Convex retries reuse the same `eventId`).\n4. Build the message and POST it to the notification sink, with retries.\n\nEnvironment variables used (no secrets in this file):\n- `LENDLOOP_WEBHOOK_SECRET`\n- `LENDLOOP_NOTIFY_SINK_URL`\n\nSet **Settings > Error workflow** to the imported \"LendLoop: Error handler\".",
-        "height": 420,
-        "width": 420
+        "content": "## LendLoop 1: request status notifications\n\nConvex POSTs here when a borrow request is created or changes status.\n\n1. **Verify**: recompute the HMAC-SHA256 of the raw request body and compare it with `X-LendLoop-Signature`; also require `sentAt` (inside the signed body) to be under 5 minutes old. Otherwise answer 401.\n2. **Acknowledge** with 202 so Convex stops retrying.\n3. **De-duplicate** on `eventId` (Convex retries reuse it).\n4. **Validate** the payload shape; a malformed event stops with an error (visible via the error workflow) instead of sending an empty message.\n5. **Notify** the one recipient in the payload.\n6. **Report back** to Convex (signed) so the loan shows \"notification sent\".\n\nConfiguration comes from environment variables, so this export holds no secrets:\n`LENDLOOP_WEBHOOK_SECRET`, `LENDLOOP_NOTIFY_SINK_URL`, `LENDLOOP_CONVEX_SITE_URL`.\n\nFailures run the \"LendLoop: Error handler\" workflow.",
+        "height": 460,
+        "width": 440
       },
       "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a01",
       "name": "Sticky Note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-520, -40]
+      "position": [
+        -540,
+        -120
+      ]
     },
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "lendloop-request-status",
         "responseMode": "responseNode",
-        "options": {}
+        "options": {
+          "rawBody": true
+        }
       },
       "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a02",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "webhookId": "lendloop-request-status"
     },
     {
       "parameters": {
         "action": "hmac",
+        "binaryData": true,
+        "binaryPropertyName": "data",
         "type": "SHA256",
-        "value": "={{ $json.headers['x-lendloop-timestamp'] }}.{{ JSON.stringify($json.body) }}",
         "dataPropertyName": "expectedSignature",
         "secret": "={{ $env.LENDLOOP_WEBHOOK_SECRET }}",
         "encoding": "hex"
       },
       "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a03",
-      "name": "Compute expected signature",
+      "name": "HMAC of raw body",
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 1,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -55,12 +68,15 @@
             {
               "id": "c1a5b6f0-0001-4a55-9d0c-5f0b1b525c0e",
               "leftValue": "={{ $json.expectedSignature }}",
-              "rightValue": "={{ $json.headers['x-lendloop-signature'] }}",
-              "operator": { "type": "string", "operation": "equals" }
+              "rightValue": "={{ $json.headers['x-lendloop-signature'] ?? '' }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
             },
             {
               "id": "c1a5b6f0-0002-4a55-9d0c-5f0b1b525c0e",
-              "leftValue": "={{ Math.abs(Date.now() - Number($json.headers['x-lendloop-timestamp'])) < 300000 }}",
+              "leftValue": "={{ Math.abs(Date.now() - Number($json.body?.sentAt)) < 300000 }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -77,31 +93,44 @@
       "name": "Signature valid and fresh?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { \"received\": true, \"eventId\": $json.body.eventId } }}",
-        "options": { "responseCode": 202 }
+        "responseBody": "={{ { \"received\": true } }}",
+        "options": {
+          "responseCode": 202
+        }
       },
       "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a05",
       "name": "Acknowledge (202)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [680, -100]
+      "position": [
+        680,
+        -100
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { \"error\": \"Invalid or stale signature\" } }}",
-        "options": { "responseCode": 401 }
+        "options": {
+          "responseCode": 401
+        }
       },
       "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a06",
       "name": "Reject (401)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [680, 120]
+      "position": [
+        680,
+        120
+      ]
     },
     {
       "parameters": {
@@ -113,7 +142,10 @@
       "name": "Drop already-seen events",
       "type": "n8n-nodes-base.removeDuplicates",
       "typeVersion": 2,
-      "position": [900, -100]
+      "position": [
+        900,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -121,26 +153,20 @@
           "assignments": [
             {
               "id": "a55d0c1c-0001-4a55-9d0c-5f0b1b525c0e",
-              "name": "eventId",
-              "value": "={{ $('Webhook').item.json.body.eventId }}",
+              "name": "to",
+              "value": "={{ $('Webhook').item.json.body.recipient.email ?? '' }}",
               "type": "string"
             },
             {
               "id": "a55d0c1c-0002-4a55-9d0c-5f0b1b525c0e",
-              "name": "event",
-              "value": "={{ $('Webhook').item.json.body.event }}",
+              "name": "text",
+              "value": "={{ ((b) => ({ requested: `Hi ${b.recipient.name}, ${b.counterpartName} would like to borrow your ${b.toolName} from ${b.startDate} to ${b.endDate}.`, accepted: `Hi ${b.recipient.name}, ${b.counterpartName} accepted your request for the ${b.toolName} (${b.startDate} to ${b.endDate}).`, rejected: `Hi ${b.recipient.name}, your request for the ${b.toolName} was declined.`, returned: `Hi ${b.recipient.name}, ${b.counterpartName} marked the ${b.toolName} as returned. Thanks for bringing it back.`, cancelled: `Hi ${b.recipient.name}, ${b.counterpartName} cancelled their request for your ${b.toolName}.` })[b.event] ?? `Hi ${b.recipient.name}, your request for the ${b.toolName} is now ${b.event}.`)($('Webhook').item.json.body) }}",
               "type": "string"
             },
             {
               "id": "a55d0c1c-0003-4a55-9d0c-5f0b1b525c0e",
-              "name": "recipientEmail",
-              "value": "={{ ((b) => ['requested', 'cancelled'].includes(b.event) ? b.owner?.email : b.borrower?.email)($('Webhook').item.json.body) ?? '' }}",
-              "type": "string"
-            },
-            {
-              "id": "a55d0c1c-0004-4a55-9d0c-5f0b1b525c0e",
-              "name": "message",
-              "value": "={{ ((b) => ({ requested: `${b.borrower?.name} would like to borrow your ${b.tool?.name} from ${b.request.startDate} to ${b.request.endDate}.`, accepted: `${b.owner?.name} accepted your request for the ${b.tool?.name} (${b.request.startDate} to ${b.request.endDate}).`, rejected: `${b.owner?.name} declined your request for the ${b.tool?.name}.`, returned: `${b.owner?.name} marked the ${b.tool?.name} as returned. Thanks for bringing it back.`, cancelled: `${b.borrower?.name} cancelled their request for your ${b.tool?.name}.` })[b.event] ?? `Request for the ${b.tool?.name} is now ${b.event}.`)($('Webhook').item.json.body) }}",
+              "name": "event",
+              "value": "={{ $('Webhook').item.json.body.event }}",
               "type": "string"
             }
           ]
@@ -151,7 +177,10 @@
       "name": "Build notification",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [1120, -100]
+      "position": [
+        1340,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -159,52 +188,286 @@
         "url": "={{ $env.LENDLOOP_NOTIFY_SINK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ text: $json.message, eventId: $json.eventId, event: $json.event, to: $json.recipientEmail }) }}",
-        "options": { "timeout": 10000 }
+        "jsonBody": "={{ JSON.stringify({ to: $json.to, text: $json.text, event: $json.event }) }}",
+        "options": {
+          "timeout": 10000
+        }
       },
       "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a09",
-      "name": "Dispatch notification",
+      "name": "Send notification",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, -100],
+      "position": [
+        1560,
+        -100
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a55d0c1c-0004-4a55-9d0c-5f0b1b525c0e",
+              "name": "timestamp",
+              "value": "={{ Date.now().toString() }}",
+              "type": "string"
+            },
+            {
+              "id": "a55d0c1c-0005-4a55-9d0c-5f0b1b525c0e",
+              "name": "rawBody",
+              "value": "={{ JSON.stringify({ requestId: $('Webhook').item.json.body.requestId, kind: 'notification_sent', key: $('Webhook').item.json.body.eventId, status: $('Webhook').item.json.body.event }) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a10",
+      "name": "Build activity report",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1780,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.timestamp }}.POST./n8n/activity.{{ $json.rawBody }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $env.LENDLOOP_WEBHOOK_SECRET }}",
+        "encoding": "hex"
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a11",
+      "name": "Sign activity report",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LENDLOOP_CONVEX_SITE_URL }}/n8n/activity",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-LendLoop-Timestamp",
+              "value": "={{ $json.timestamp }}"
+            },
+            {
+              "name": "X-LendLoop-Signature",
+              "value": "={{ $json.signature }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.rawBody }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a12",
+      "name": "Record activity in Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        -100
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1a5b6f0-0003-4a55-9d0c-5f0b1b525c0e",
+              "leftValue": "={{ ((b) => ['requestId', 'eventId', 'event', 'toolName', 'counterpartName'].every((k) => typeof b[k] === 'string' && b[k] !== '') && typeof b.recipient?.name === 'string')($('Webhook').item.json.body) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a13",
+      "name": "Payload complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=Signed LendLoop event {{ $('Webhook').item.json.body.eventId }} is missing required fields; nothing was sent."
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a14",
+      "name": "Fail: malformed event",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        120
+      ]
     }
   ],
   "connections": {
     "Webhook": {
       "main": [
-        [{ "node": "Compute expected signature", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "HMAC of raw body",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Compute expected signature": {
+    "HMAC of raw body": {
       "main": [
-        [{ "node": "Signature valid and fresh?", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Signature valid and fresh?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Signature valid and fresh?": {
       "main": [
-        [{ "node": "Acknowledge (202)", "type": "main", "index": 0 }],
-        [{ "node": "Reject (401)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Acknowledge (202)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject (401)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Acknowledge (202)": {
       "main": [
-        [{ "node": "Drop already-seen events", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Drop already-seen events",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Drop already-seen events": {
-      "main": [[{ "node": "Build notification", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Payload complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build notification": {
       "main": [
-        [{ "node": "Dispatch notification", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Send notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send notification": {
+      "main": [
+        [
+          {
+            "node": "Build activity report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build activity report": {
+      "main": [
+        [
+          {
+            "node": "Sign activity report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign activity report": {
+      "main": [
+        [
+          {
+            "node": "Record activity in Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Payload complete?": {
+      "main": [
+        [
+          {
+            "node": "Build notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail: malformed event",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
   "pinData": {},
   "active": false,
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "lendloopErrors01"
+  },
   "tags": []
 }
