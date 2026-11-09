@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import type { ReactNode } from "react";
 import {
+  ActivityList,
   buttonDanger,
   buttonPrimary,
   buttonSecondary,
@@ -44,6 +45,7 @@ function RequestRow({
         </div>
         <StatusBadge status={request.status} />
       </div>
+      <ActivityList activity={request.activity} />
       {children}
     </li>
   );

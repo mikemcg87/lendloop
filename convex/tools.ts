@@ -2,11 +2,15 @@ import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
-import { categoryValidator, type Category } from "./lib/domain";
+import {
+  categoryValidator,
+  conditionValidator,
+  type Category,
+} from "./lib/domain";
 import { archiveTool, hasActiveLoan } from "./lib/loans";
 
 const NAME_MAX = 80;
-const DESCRIPTION_MAX = 1000;
+const DESCRIPTION_MAX = 300;
 
 function cleanFields(name: string, description: string) {
   const trimmedName = name.trim();
@@ -36,17 +40,26 @@ function activeTools(ctx: QueryCtx, category?: Category) {
     .take(200);
 }
 
-// Unauthenticated landing-page feed. Returns ONLY name, category and
-// availability: no owner, description or photo leaves the backend here.
+// Unauthenticated landing-page feed: tools that can be borrowed right now.
+// Returns ONLY name and category (plus the id as a list key). No owner,
+// description, condition or photo leaves the backend for anonymous callers.
 export const listPublic = query({
   args: { category: v.optional(categoryValidator) },
   handler: async (ctx, args) => {
-    const tools = await activeTools(ctx, args.category);
+    const { category } = args;
+    const tools = await ctx.db
+      .query("tools")
+      .withIndex("by_deleted_category", (q) => {
+        const live = q.eq("deletedAt", undefined);
+        return category ? live.eq("category", category) : live;
+      })
+      .filter((q) => q.eq(q.field("status"), "available"))
+      .order("desc")
+      .take(200);
     return tools.map((tool) => ({
       _id: tool._id,
       name: tool.name,
       category: tool.category,
-      available: tool.status === "available",
     }));
   },
 });
@@ -60,6 +73,7 @@ async function withDetails(ctx: QueryCtx, tool: Doc<"tools">) {
     _id: tool._id,
     name: tool.name,
     category: tool.category,
+    condition: tool.condition,
     description: tool.description,
     available: tool.status === "available",
     imageUrl,
@@ -115,6 +129,7 @@ export const create = mutation({
   args: {
     name: v.string(),
     category: categoryValidator,
+    condition: conditionValidator,
     description: v.string(),
     imageStorageId: v.optional(v.id("_storage")),
   },
@@ -124,6 +139,7 @@ export const create = mutation({
       ownerId: user._id,
       ...cleanFields(args.name, args.description),
       category: args.category,
+      condition: args.condition,
       imageStorageId: args.imageStorageId,
       status: "available",
     });
@@ -148,6 +164,7 @@ export const update = mutation({
     toolId: v.id("tools"),
     name: v.string(),
     category: categoryValidator,
+    condition: conditionValidator,
     description: v.string(),
     imageStorageId: v.optional(v.id("_storage")),
   },
@@ -157,6 +174,7 @@ export const update = mutation({
     await ctx.db.patch(tool._id, {
       ...cleanFields(args.name, args.description),
       category: args.category,
+      condition: args.condition,
       // Omitting the image keeps the current one.
       ...(args.imageStorageId ? { imageStorageId: args.imageStorageId } : {}),
     });

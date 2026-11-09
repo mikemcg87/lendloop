@@ -1,7 +1,7 @@
 "use client";
 
 import { api } from "@convex/_generated/api";
-import type { Category } from "@convex/lib/domain";
+import { CATEGORIES, type Category } from "@convex/lib/domain";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { Wrench } from "lucide-react";
@@ -10,9 +10,9 @@ import {
   AvailabilityBadge,
   buttonPrimary,
   buttonSecondary,
-  CategorySelect,
   ErrorText,
   inputClass,
+  Select,
   TrustedBadge,
   useRun,
 } from "../ui";
@@ -104,7 +104,9 @@ function ToolCard({ tool }: { tool: Tool }) {
       <div className="mt-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-medium">{tool.name}</p>
-          <p className="text-sm text-stone-500">{tool.category}</p>
+          <p className="text-sm text-stone-500">
+            {tool.category} · {tool.condition}
+          </p>
         </div>
         <AvailabilityBadge available={tool.available} />
       </div>
@@ -138,7 +140,12 @@ export function BrowseTools() {
     <section>
       <label className="flex items-center gap-2 text-sm text-stone-600">
         Category
-        <CategorySelect value={category} onChange={setCategory} allLabel="All" />
+        <Select
+          value={category}
+          onChange={setCategory}
+          options={CATEGORIES}
+          allLabel="All"
+        />
       </label>
       {tools === undefined ? (
         <p className="mt-6 text-sm text-stone-500">Loading tools…</p>

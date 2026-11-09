@@ -1,8 +1,8 @@
 "use client";
 
-import { CATEGORIES, type Category, type RequestStatus } from "@convex/lib/domain";
+import type { AutomationKind, RequestStatus } from "@convex/lib/domain";
 import { ConvexError } from "convex/values";
-import { BadgeCheck } from "lucide-react";
+import { BadgeCheck, Zap } from "lucide-react";
 import { useState } from "react";
 
 export const buttonPrimary =
@@ -93,31 +93,75 @@ export function TrustedBadge() {
   );
 }
 
-export function CategorySelect({
+export function Select<T extends string>({
   value,
   onChange,
+  options,
   allLabel,
 }: {
-  value: Category | undefined;
-  onChange: (value: Category | undefined) => void;
-  // When set, adds an "all categories" option that maps to undefined.
+  value: T | undefined;
+  onChange: (value: T | undefined) => void;
+  options: readonly T[];
+  // When set, adds an "all" option that maps to undefined.
   allLabel?: string;
 }) {
   return (
     <select
       value={value ?? ""}
-      onChange={(e) =>
-        onChange((e.target.value || undefined) as Category | undefined)
-      }
+      onChange={(e) => onChange((e.target.value || undefined) as T | undefined)}
       className="rounded-md border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900"
     >
       {allLabel && <option value="">{allLabel}</option>}
-      {CATEGORIES.map((c) => (
-        <option key={c} value={c}>
-          {c}
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option}
         </option>
       ))}
     </select>
+  );
+}
+
+const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ["day", 86_400_000],
+  ["hour", 3_600_000],
+  ["minute", 60_000],
+];
+
+export function timeAgo(timestamp: number) {
+  const elapsed = Date.now() - timestamp;
+  const format = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  for (const [unit, ms] of UNITS) {
+    if (elapsed >= ms) return format.format(-Math.floor(elapsed / ms), unit);
+  }
+  return "just now";
+}
+
+const NOTIFICATION_LABELS: Record<RequestStatus, string> = {
+  requested: "New request",
+  accepted: "Acceptance",
+  rejected: "Decline",
+  cancelled: "Cancellation",
+  returned: "Return",
+  overdue: "Overdue",
+};
+
+type Activity = { kind: AutomationKind; status?: RequestStatus; at: number };
+
+// Deliveries n8n has confirmed for a loan, e.g. "Reminder sent 2 days ago".
+export function ActivityList({ activity }: { activity: Activity[] }) {
+  if (activity.length === 0) return null;
+  return (
+    <ul className="mt-2 space-y-0.5 text-xs text-stone-500">
+      {activity.map((event) => (
+        <li key={`${event.kind}-${event.at}`} className="flex items-center gap-1">
+          <Zap className="size-3 shrink-0" aria-hidden />
+          {event.kind === "reminder_sent"
+            ? "Overdue reminder sent"
+            : `${event.status ? NOTIFICATION_LABELS[event.status] : "Status"} notification sent`}{" "}
+          {timeAgo(event.at)}
+        </li>
+      ))}
+    </ul>
   );
 }
 

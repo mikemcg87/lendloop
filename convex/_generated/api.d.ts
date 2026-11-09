@@ -9,6 +9,7 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as automation from "../automation.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_domain from "../lib/domain.js";
@@ -17,6 +18,7 @@ import type * as lib_loans from "../lib/loans.js";
 import type * as notifications from "../notifications.js";
 import type * as overdue from "../overdue.js";
 import type * as requests from "../requests.js";
+import type * as seed from "../seed.js";
 import type * as tools from "../tools.js";
 import type * as users from "../users.js";
 
@@ -28,6 +30,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  automation: typeof automation;
   http: typeof http;
   "lib/auth": typeof lib_auth;
   "lib/domain": typeof lib_domain;
@@ -36,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   notifications: typeof notifications;
   overdue: typeof overdue;
   requests: typeof requests;
+  seed: typeof seed;
   tools: typeof tools;
   users: typeof users;
 }>;

@@ -68,12 +68,23 @@ export async function archiveTool(
 }
 
 export async function enrichRequest(ctx: QueryCtx, request: Doc<"requests">) {
-  const [tool, owner, borrower] = await Promise.all([
+  const [tool, owner, borrower, activity] = await Promise.all([
     ctx.db.get(request.toolId),
     ctx.db.get(request.ownerId),
     ctx.db.get(request.borrowerId),
+    ctx.db
+      .query("automationEvents")
+      .withIndex("by_request", (q) => q.eq("requestId", request._id))
+      .order("desc")
+      .take(3),
   ]);
   return {
+    // Most recent deliveries reported back by n8n, newest first.
+    activity: activity.map((event) => ({
+      kind: event.kind,
+      status: event.status,
+      at: event._creationTime,
+    })),
     _id: request._id,
     _creationTime: request._creationTime,
     status: request.status,

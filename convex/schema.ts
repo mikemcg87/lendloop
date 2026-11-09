@@ -1,6 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { categoryValidator, requestStatusValidator } from "./lib/domain";
+import {
+  automationKindValidator,
+  categoryValidator,
+  conditionValidator,
+  requestStatusValidator,
+} from "./lib/domain";
 
 export default defineSchema({
   // Mirror of the Clerk user, upserted on sign-in. The role is deliberately
@@ -19,6 +24,7 @@ export default defineSchema({
     ownerId: v.id("users"),
     name: v.string(),
     category: categoryValidator,
+    condition: conditionValidator,
     description: v.string(),
     imageStorageId: v.optional(v.id("_storage")),
     // Flipped transactionally when a loan is accepted / returned.
@@ -47,6 +53,18 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_tool_status", ["toolId", "status"])
     .index("by_status_end_date", ["status", "endDate"]),
+
+  // Deliveries reported back by n8n, shown on each loan ("Reminder sent 2
+  // days ago"). `key` is the idempotency key: one row per key, ever.
+  automationEvents: defineTable({
+    requestId: v.id("requests"),
+    kind: automationKindValidator,
+    key: v.string(),
+    // For notification_sent: which status change was announced.
+    status: v.optional(requestStatusValidator),
+  })
+    .index("by_key", ["key"])
+    .index("by_request", ["requestId"]),
 
   adminAuditLog: defineTable({
     actorId: v.id("users"),

@@ -6,6 +6,7 @@ import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { useState } from "react";
 import { Tabs } from "@/components/Tabs";
 import {
+  ActivityList,
   AvailabilityBadge,
   buttonDanger,
   buttonSecondary,
@@ -98,6 +99,7 @@ function Loans() {
                   </td>
                   <td className="px-4 py-2">
                     <StatusBadge status={loan.status} />
+                    <ActivityList activity={loan.activity} />
                   </td>
                 </tr>
               ))}

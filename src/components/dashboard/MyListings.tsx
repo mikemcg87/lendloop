@@ -2,7 +2,12 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import type { Category } from "@convex/lib/domain";
+import {
+  CATEGORIES,
+  CONDITIONS,
+  type Category,
+  type Condition,
+} from "@convex/lib/domain";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -12,9 +17,9 @@ import {
   buttonDanger,
   buttonPrimary,
   buttonSecondary,
-  CategorySelect,
   ErrorText,
   inputClass,
+  Select,
   useRun,
 } from "../ui";
 import { ToolImage } from "./BrowseTools";
@@ -29,6 +34,9 @@ function ToolForm({ tool, onDone }: { tool?: Tool; onDone: () => void }) {
   const [name, setName] = useState(tool?.name ?? "");
   const [category, setCategory] = useState<Category>(
     tool?.category ?? "Power Tools",
+  );
+  const [condition, setCondition] = useState<Condition>(
+    tool?.condition ?? "Good",
   );
   const [description, setDescription] = useState(tool?.description ?? "");
   const [photo, setPhoto] = useState<File | null>(null);
@@ -53,7 +61,13 @@ function ToolForm({ tool, onDone }: { tool?: Tool; onDone: () => void }) {
         e.preventDefault();
         const ok = await run(async () => {
           const imageStorageId = photo ? await uploadPhoto(photo) : undefined;
-          const fields = { name, category, description, imageStorageId };
+          const fields = {
+            name,
+            category,
+            condition,
+            description,
+            imageStorageId,
+          };
           if (tool) await updateTool({ toolId: tool._id, ...fields });
           else await createTool(fields);
         });
@@ -71,20 +85,33 @@ function ToolForm({ tool, onDone }: { tool?: Tool; onDone: () => void }) {
           className={`mt-1 ${inputClass}`}
         />
       </label>
+      <div className="flex flex-wrap gap-4">
+        <label className="block text-sm font-medium text-stone-700">
+          Category
+          <div className="mt-1">
+            <Select
+              value={category}
+              onChange={(value) => value && setCategory(value)}
+              options={CATEGORIES}
+            />
+          </div>
+        </label>
+        <label className="block text-sm font-medium text-stone-700">
+          Condition
+          <div className="mt-1">
+            <Select
+              value={condition}
+              onChange={(value) => value && setCondition(value)}
+              options={CONDITIONS}
+            />
+          </div>
+        </label>
+      </div>
       <label className="block text-sm font-medium text-stone-700">
-        Category
-        <div className="mt-1">
-          <CategorySelect
-            value={category}
-            onChange={(value) => value && setCategory(value)}
-          />
-        </div>
-      </label>
-      <label className="block text-sm font-medium text-stone-700">
-        Description
+        Short description
         <textarea
           rows={3}
-          maxLength={1000}
+          maxLength={300}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           className={`mt-1 ${inputClass}`}
@@ -121,7 +148,9 @@ function ListingCard({ tool, onEdit }: { tool: Tool; onEdit: () => void }) {
       <div className="mt-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-medium">{tool.name}</p>
-          <p className="text-sm text-stone-500">{tool.category}</p>
+          <p className="text-sm text-stone-500">
+            {tool.category} · {tool.condition}
+          </p>
         </div>
         <AvailabilityBadge available={tool.available} />
       </div>
