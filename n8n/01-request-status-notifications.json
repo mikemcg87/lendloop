@@ -1,0 +1,210 @@
+{
+  "name": "LendLoop 1: Request status notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## LendLoop: request status notifications\n\nConvex POSTs here whenever a borrow request changes status (requested, accepted, rejected, returned, cancelled).\n\n1. Recompute the HMAC over `timestamp.body` and reject anything unsigned or older than 5 minutes (401).\n2. Acknowledge with 202 straight away so Convex stops retrying.\n3. Drop events already seen (Convex retries reuse the same `eventId`).\n4. Build the message and POST it to the notification sink, with retries.\n\nEnvironment variables used (no secrets in this file):\n- `LENDLOOP_WEBHOOK_SECRET`\n- `LENDLOOP_NOTIFY_SINK_URL`\n\nSet **Settings > Error workflow** to the imported \"LendLoop: Error handler\".",
+        "height": 420,
+        "width": 420
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a01",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-520, -40]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lendloop-request-status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a02",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "lendloop-request-status"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.headers['x-lendloop-timestamp'] }}.{{ JSON.stringify($json.body) }}",
+        "dataPropertyName": "expectedSignature",
+        "secret": "={{ $env.LENDLOOP_WEBHOOK_SECRET }}",
+        "encoding": "hex"
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a03",
+      "name": "Compute expected signature",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1a5b6f0-0001-4a55-9d0c-5f0b1b525c0e",
+              "leftValue": "={{ $json.expectedSignature }}",
+              "rightValue": "={{ $json.headers['x-lendloop-signature'] }}",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "id": "c1a5b6f0-0002-4a55-9d0c-5f0b1b525c0e",
+              "leftValue": "={{ Math.abs(Date.now() - Number($json.headers['x-lendloop-timestamp'])) < 300000 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a04",
+      "name": "Signature valid and fresh?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"received\": true, \"eventId\": $json.body.eventId } }}",
+        "options": { "responseCode": 202 }
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a05",
+      "name": "Acknowledge (202)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"Invalid or stale signature\" } }}",
+        "options": { "responseCode": 401 }
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a06",
+      "name": "Reject (401)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 120]
+    },
+    {
+      "parameters": {
+        "operation": "removeItemsSeenInPreviousExecutions",
+        "dedupeValue": "={{ $('Webhook').item.json.body.eventId }}",
+        "options": {}
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a07",
+      "name": "Drop already-seen events",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [900, -100]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a55d0c1c-0001-4a55-9d0c-5f0b1b525c0e",
+              "name": "eventId",
+              "value": "={{ $('Webhook').item.json.body.eventId }}",
+              "type": "string"
+            },
+            {
+              "id": "a55d0c1c-0002-4a55-9d0c-5f0b1b525c0e",
+              "name": "event",
+              "value": "={{ $('Webhook').item.json.body.event }}",
+              "type": "string"
+            },
+            {
+              "id": "a55d0c1c-0003-4a55-9d0c-5f0b1b525c0e",
+              "name": "recipientEmail",
+              "value": "={{ ((b) => ['requested', 'cancelled'].includes(b.event) ? b.owner?.email : b.borrower?.email)($('Webhook').item.json.body) ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "a55d0c1c-0004-4a55-9d0c-5f0b1b525c0e",
+              "name": "message",
+              "value": "={{ ((b) => ({ requested: `${b.borrower?.name} would like to borrow your ${b.tool?.name} from ${b.request.startDate} to ${b.request.endDate}.`, accepted: `${b.owner?.name} accepted your request for the ${b.tool?.name} (${b.request.startDate} to ${b.request.endDate}).`, rejected: `${b.owner?.name} declined your request for the ${b.tool?.name}.`, returned: `${b.owner?.name} marked the ${b.tool?.name} as returned. Thanks for bringing it back.`, cancelled: `${b.borrower?.name} cancelled their request for your ${b.tool?.name}.` })[b.event] ?? `Request for the ${b.tool?.name} is now ${b.event}.`)($('Webhook').item.json.body) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a08",
+      "name": "Build notification",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1120, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LENDLOOP_NOTIFY_SINK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.message, eventId: $json.eventId, event: $json.event, to: $json.recipientEmail }) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a09",
+      "name": "Dispatch notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, -100],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Compute expected signature", "type": "main", "index": 0 }]
+      ]
+    },
+    "Compute expected signature": {
+      "main": [
+        [{ "node": "Signature valid and fresh?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Signature valid and fresh?": {
+      "main": [
+        [{ "node": "Acknowledge (202)", "type": "main", "index": 0 }],
+        [{ "node": "Reject (401)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Acknowledge (202)": {
+      "main": [
+        [{ "node": "Drop already-seen events", "type": "main", "index": 0 }]
+      ]
+    },
+    "Drop already-seen events": {
+      "main": [[{ "node": "Build notification", "type": "main", "index": 0 }]]
+    },
+    "Build notification": {
+      "main": [
+        [{ "node": "Dispatch notification", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": []
+}

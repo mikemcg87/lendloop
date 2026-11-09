@@ -1,0 +1,213 @@
+{
+  "name": "LendLoop 2: Overdue loan reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## LendLoop: overdue loan reminders\n\nRuns daily at 08:00.\n\n1. Signed GET to Convex `/n8n/overdue-loans`: loans past their end date that have not been reminded today.\n2. For each loan, POST a reminder to the notification sink (3 tries).\n3. Signed POST to Convex `/n8n/mark-overdue` with `{ requestId, runDate }`. Convex treats that pair as the idempotency key, so a re-run or retry is a no-op.\n\nSignatures are hex HMAC-SHA256 of `timestamp.METHOD.path.body`.\n\nEnvironment variables used (no secrets in this file):\n- `LENDLOOP_WEBHOOK_SECRET`\n- `LENDLOOP_CONVEX_SITE_URL` (the deployment's `.convex.site` URL)\n- `LENDLOOP_NOTIFY_SINK_URL`\n\nSet **Settings > Error workflow** to the imported \"LendLoop: Error handler\".",
+        "height": 440,
+        "width": 420
+      },
+      "id": "7a2c9d10-3b4e-4f61-8a2b-9e0d1c2b3a01",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-520, -60]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }]
+        }
+      },
+      "id": "7a2c9d10-3b4e-4f61-8a2b-9e0d1c2b3a02",
+      "name": "Every day at 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9e0d1c2b-0001-4f61-8a2b-7a2c9d103b4e",
+              "name": "timestamp",
+              "value": "={{ Date.now().toString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7a2c9d10-3b4e-4f61-8a2b-9e0d1c2b3a03",
+      "name": "Stamp query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.timestamp }}.GET./n8n/overdue-loans.",
+        "dataPropertyName": "signature",
+        "secret": "={{ $env.LENDLOOP_WEBHOOK_SECRET }}",
+        "encoding": "hex"
+      },
+      "id": "7a2c9d10-3b4e-4f61-8a2b-9e0d1c2b3a04",
+      "name": "Sign query",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.LENDLOOP_CONVEX_SITE_URL }}/n8n/overdue-loans",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-LendLoop-Timestamp", "value": "={{ $json.timestamp }}" },
+            { "name": "X-LendLoop-Signature", "value": "={{ $json.signature }}" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "7a2c9d10-3b4e-4f61-8a2b-9e0d1c2b3a05",
+      "name": "Fetch overdue loans",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "loans",
+        "options": {}
+      },
+      "id": "7a2c9d10-3b4e-4f61-8a2b-9e0d1c2b3a06",
+      "name": "One item per loan",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LENDLOOP_NOTIFY_SINK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: `Reminder: the ${$json.toolName} you borrowed from ${$json.owner.name} was due back on ${$json.endDate}. Please return it.`, event: 'overdue', eventId: `${$json.requestId}:overdue:${$json.runDate}`, to: $json.borrower.email ?? '' }) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "7a2c9d10-3b4e-4f61-8a2b-9e0d1c2b3a07",
+      "name": "Send reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9e0d1c2b-0002-4f61-8a2b-7a2c9d103b4e",
+              "name": "timestamp",
+              "value": "={{ Date.now().toString() }}",
+              "type": "string"
+            },
+            {
+              "id": "9e0d1c2b-0003-4f61-8a2b-7a2c9d103b4e",
+              "name": "rawBody",
+              "value": "={{ JSON.stringify({ requestId: $('One item per loan').item.json.requestId, runDate: $('One item per loan').item.json.runDate }) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7a2c9d10-3b4e-4f61-8a2b-9e0d1c2b3a08",
+      "name": "Build write-back",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.timestamp }}.POST./n8n/mark-overdue.{{ $json.rawBody }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $env.LENDLOOP_WEBHOOK_SECRET }}",
+        "encoding": "hex"
+      },
+      "id": "7a2c9d10-3b4e-4f61-8a2b-9e0d1c2b3a09",
+      "name": "Sign write-back",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [1540, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LENDLOOP_CONVEX_SITE_URL }}/n8n/mark-overdue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-LendLoop-Timestamp", "value": "={{ $json.timestamp }}" },
+            { "name": "X-LendLoop-Signature", "value": "={{ $json.signature }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.rawBody }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "7a2c9d10-3b4e-4f61-8a2b-9e0d1c2b3a10",
+      "name": "Mark overdue in Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Every day at 08:00": {
+      "main": [[{ "node": "Stamp query", "type": "main", "index": 0 }]]
+    },
+    "Stamp query": {
+      "main": [[{ "node": "Sign query", "type": "main", "index": 0 }]]
+    },
+    "Sign query": {
+      "main": [[{ "node": "Fetch overdue loans", "type": "main", "index": 0 }]]
+    },
+    "Fetch overdue loans": {
+      "main": [[{ "node": "One item per loan", "type": "main", "index": 0 }]]
+    },
+    "One item per loan": {
+      "main": [[{ "node": "Send reminder", "type": "main", "index": 0 }]]
+    },
+    "Send reminder": {
+      "main": [[{ "node": "Build write-back", "type": "main", "index": 0 }]]
+    },
+    "Build write-back": {
+      "main": [[{ "node": "Sign write-back", "type": "main", "index": 0 }]]
+    },
+    "Sign write-back": {
+      "main": [
+        [{ "node": "Mark overdue in Convex", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": []
+}
