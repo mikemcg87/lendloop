@@ -18,6 +18,10 @@ services:
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       LENDLOOP_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:?Set N8N_WEBHOOK_SECRET in n8n/.env}
       LENDLOOP_CONVEX_SITE_URL: ${LENDLOOP_CONVEX_SITE_URL:-http://host.docker.internal:3211}
+      # "mock" logs notifications to the sink below; "ses" emails them through
+      # Amazon SES using the "LendLoop SES (AWS)" n8n credential.
+      LENDLOOP_NOTIFY_CHANNEL: ${LENDLOOP_NOTIFY_CHANNEL:-mock}
+      LENDLOOP_SES_FROM: ${LENDLOOP_SES_FROM:-}
       LENDLOOP_NOTIFY_SINK_URL: ${LENDLOOP_NOTIFY_SINK_URL:-http://notification-sink:8080/notify}
       LENDLOOP_ALERT_URL: ${LENDLOOP_ALERT_URL:-http://notification-sink:8080/alert}
       GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Europe/London}

@@ -4,8 +4,8 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## LendLoop 1: request status notifications\n\nConvex POSTs here when a borrow request is created or changes status.\n\n1. **Verify**: recompute the HMAC-SHA256 of the raw request body and compare it with `X-LendLoop-Signature`; also require `sentAt` (inside the signed body) to be under 5 minutes old. Otherwise answer 401.\n2. **Acknowledge** with 202 so Convex stops retrying.\n3. **De-duplicate** on `eventId` (Convex retries reuse it).\n4. **Validate** the payload shape; a malformed event stops with an error (visible via the error workflow) instead of sending an empty message.\n5. **Notify** the one recipient in the payload.\n6. **Report back** to Convex (signed) so the loan shows \"notification sent\".\n\nConfiguration comes from environment variables, so this export holds no secrets:\n`LENDLOOP_WEBHOOK_SECRET`, `LENDLOOP_NOTIFY_SINK_URL`, `LENDLOOP_CONVEX_SITE_URL`.\n\nFailures run the \"LendLoop: Error handler\" workflow.",
-        "height": 460,
+        "content": "## LendLoop 1: request status notifications\n\nConvex POSTs here when a borrow request is created or changes status.\n\n1. **Verify**: recompute the HMAC-SHA256 of the raw request body and compare it with `X-LendLoop-Signature`; also require `sentAt` (inside the signed body) to be under 5 minutes old. Otherwise answer 401.\n2. **Acknowledge** with 202 so Convex stops retrying.\n3. **De-duplicate** on `eventId` (Convex retries reuse it).\n4. **Validate** the payload shape; a malformed event stops with an error (visible via the error workflow) instead of sending an empty message.\n5. **Notify** the one recipient in the payload: by email through Amazon SES when `LENDLOOP_NOTIFY_CHANNEL=ses` (AWS key held in an n8n credential), otherwise by POSTing to the mock sink, which just logs it.\n6. **Report back** to Convex (signed) so the loan shows \"notification sent\".\n\nConfiguration comes from environment variables, so this export holds no secrets:\n`LENDLOOP_WEBHOOK_SECRET`, `LENDLOOP_CONVEX_SITE_URL`, `LENDLOOP_NOTIFY_CHANNEL`, `LENDLOOP_NOTIFY_SINK_URL`, `LENDLOOP_SES_FROM`.\n\nFailures run the \"LendLoop: Error handler\" workflow.",
+        "height": 540,
         "width": 440
       },
       "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a01",
@@ -168,6 +168,12 @@
               "name": "event",
               "value": "={{ $('Webhook').item.json.body.event }}",
               "type": "string"
+            },
+            {
+              "id": "a55d0c1c-0006-4a55-9d0c-5f0b1b525c0e",
+              "name": "subject",
+              "value": "={{ ((b) => ({ requested: `Request to borrow your ${b.toolName}`, accepted: `Your request for the ${b.toolName} was accepted`, rejected: `Your request for the ${b.toolName} was declined`, returned: `${b.toolName} marked as returned`, cancelled: `Request for your ${b.toolName} withdrawn` })[b.event] ?? `LendLoop: ${b.toolName}`)($('Webhook').item.json.body) }}",
+              "type": "string"
             }
           ]
         },
@@ -194,12 +200,12 @@
         }
       },
       "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a09",
-      "name": "Send notification",
+      "name": "Log to mock sink",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1560,
-        -100
+        1780,
+        0
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -230,7 +236,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1780,
+        2000,
         -100
       ]
     },
@@ -248,7 +254,7 @@
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 1,
       "position": [
-        2000,
+        2220,
         -100
       ]
     },
@@ -282,7 +288,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2220,
+        2440,
         -100
       ],
       "retryOnFail": true,
@@ -334,6 +340,71 @@
       "position": [
         1340,
         120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1a5b6f0-0004-4a55-9d0c-5f0b1b525c0e",
+              "leftValue": "={{ $env.LENDLOOP_NOTIFY_CHANNEL === 'ses' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Email via SES?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a15",
+      "position": [
+        1560,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "isBodyHtml": false,
+        "subject": "={{ $json.subject }}",
+        "body": "={{ $json.text }}",
+        "fromEmail": "={{ $env.LENDLOOP_SES_FROM }}",
+        "toAddresses": [
+          "={{ $json.to }}"
+        ],
+        "additionalFields": {}
+      },
+      "name": "Email via Amazon SES",
+      "type": "n8n-nodes-base.awsSes",
+      "typeVersion": 1,
+      "credentials": {
+        "aws": {
+          "id": "lendloopAwsSes01",
+          "name": "LendLoop SES (AWS)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "id": "5f0b1b52-5c0e-4a55-9d0c-1c1a5b6f0a16",
+      "position": [
+        1780,
+        -200
       ]
     }
   ],
@@ -404,18 +475,7 @@
       "main": [
         [
           {
-            "node": "Send notification",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send notification": {
-      "main": [
-        [
-          {
-            "node": "Build activity report",
+            "node": "Email via SES?",
             "type": "main",
             "index": 0
           }
@@ -456,6 +516,46 @@
         [
           {
             "node": "Fail: malformed event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email via SES?": {
+      "main": [
+        [
+          {
+            "node": "Email via Amazon SES",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log to mock sink",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email via Amazon SES": {
+      "main": [
+        [
+          {
+            "node": "Build activity report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to mock sink": {
+      "main": [
+        [
+          {
+            "node": "Build activity report",
             "type": "main",
             "index": 0
           }
