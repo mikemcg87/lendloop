@@ -19,7 +19,7 @@ Built with Next.js 16 (App Router), Clerk, Convex, n8n and TypeScript.
 
 ## Live demo
 
-**[lendloop-alpha-lemon.vercel.app](https://lendloop-alpha-lemon.vercel.app)**: the app on Vercel, a Convex cloud deployment and the three workflows on a self-hosted n8n.
+**[lendloop.michaeljmcglade.com](https://lendloop.michaeljmcglade.com)**: the app on Vercel, a Convex cloud deployment and the three workflows on a self-hosted n8n.
 
 - **Sign up with any email.** A new account is given an overdue loan (a sander from a demo neighbour) and an incoming request for a ladder listed in its name, so one account can approve or decline, mark a loan returned, note damage and see the overdue stamp. To sign up without a real inbox, use an address containing `+clerk_test`, such as `you+clerk_test@example.com`, and enter `424242` as the code.
 - **Admin login:** `demo-admin+clerk_test@example.com` / `lendlooptakehome123`. If Clerk asks for an emailed code, enter `424242` (it is a Clerk test address). The admin role is granted in Clerk metadata, which only the secret key can write, so an account you create yourself is always an ordinary user. On this demo the admin's member list shows names without emails.

@@ -92,6 +92,17 @@ describe("demo deployment", () => {
     expect((await as.query(api.tools.listMine, {})).map((tool) => tool.name)).toEqual([
       "Extension ladder",
     ]);
+
+    // Starter tools are private to their account: a second account sees its
+    // own sander and ladder, not the first one's, and the public list has none.
+    const second = await signUp("second");
+    const names = async (who: typeof as) =>
+      (await who.query(api.tools.browse, {})).map((tool) => tool.name);
+    expect((await names(as)).filter((n) => n === "Orbital sander")).toHaveLength(1);
+    expect((await names(second.as)).filter((n) => n === "Extension ladder")).toHaveLength(1);
+    expect((await t.query(api.tools.listPublic, {})).map((tool) => tool.name)).not.toContain(
+      "Extension ladder",
+    );
   });
 
   it("hides member emails from the shared admin login", async () => {

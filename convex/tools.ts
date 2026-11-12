@@ -70,11 +70,13 @@ export const listPublic = query({
       .filter((q) => q.eq(q.field("status"), "available"))
       .order("desc")
       .take(200);
-    return tools.map((tool) => ({
-      _id: tool._id,
-      name: tool.name,
-      category: tool.category,
-    }));
+    return tools
+      .filter((tool) => !tool.starterFor)
+      .map((tool) => ({
+        _id: tool._id,
+        name: tool.name,
+        category: tool.category,
+      }));
   },
 });
 
@@ -106,10 +108,12 @@ export const browse = query({
     const { user } = await requireUser(ctx);
     const tools = await activeTools(ctx, args.category);
     return await Promise.all(
-      tools.map(async (tool) => ({
-        ...(await withDetails(ctx, tool)),
-        isMine: tool.ownerId === user._id,
-      })),
+      tools
+        .filter((tool) => !tool.starterFor || tool.starterFor === user._id)
+        .map(async (tool) => ({
+          ...(await withDetails(ctx, tool)),
+          isMine: tool.ownerId === user._id,
+        })),
     );
   },
 });

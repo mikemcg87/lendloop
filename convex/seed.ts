@@ -135,6 +135,7 @@ function list(
   ownerId: Id<"users">,
   tool: SeedTool,
   status: "available" | "on_loan" = "available",
+  starterFor?: Id<"users">,
 ) {
   return ctx.db.insert("tools", {
     ownerId,
@@ -144,6 +145,7 @@ function list(
     description: tool.description,
     imageStorageId: photos[tool.photo],
     status,
+    starterFor,
   });
 }
 
@@ -186,7 +188,7 @@ export const kit = internalMutation({
     // A loan that was due back two days ago, for the overdue workflow.
     const now = Date.now();
     await ctx.db.insert("requests", {
-      toolId: await list(ctx, photos, aoife._id, SANDER, "on_loan"),
+      toolId: await list(ctx, photos, aoife._id, SANDER, "on_loan", userId),
       ownerId: aoife._id,
       borrowerId: userId,
       startDate: isoDate(now - 6 * DAY_MS),
@@ -195,7 +197,7 @@ export const kit = internalMutation({
     });
     // A tool of yours that a neighbour has asked for, waiting on your answer.
     await ctx.db.insert("requests", {
-      toolId: await list(ctx, photos, userId, LADDER),
+      toolId: await list(ctx, photos, userId, LADDER, "available", userId),
       ownerId: userId,
       borrowerId: declan._id,
       startDate: isoDate(now + DAY_MS),

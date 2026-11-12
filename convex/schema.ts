@@ -32,6 +32,9 @@ export default defineSchema({
     // Soft delete so loan history keeps a readable tool reference.
     deletedAt: v.optional(v.number()),
     deletedBy: v.optional(v.id("users")),
+    // Set on the demo data's starter tools (see seed.ts): the account they
+    // were created for. Other accounts do not see them on the board.
+    starterFor: v.optional(v.id("users")),
   })
     .index("by_owner", ["ownerId"])
     .index("by_deleted_category", ["deletedAt", "category"]),
