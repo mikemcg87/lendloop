@@ -4,36 +4,34 @@ import { api } from "@convex/_generated/api";
 import { CATEGORIES, type Category } from "@convex/lib/domain";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { Wrench } from "lucide-react";
 import { useState } from "react";
 import {
-  AvailabilityBadge,
   buttonPrimary,
   buttonSecondary,
+  columnHead,
   ErrorText,
+  fieldLabel,
   inputClass,
+  ledgerRow,
+  linkAction,
+  meta,
+  Note,
   Select,
-  TrustedBadge,
+  Trusted,
   useRun,
 } from "../ui";
 
 type Tool = FunctionReturnType<typeof api.tools.browse>[number];
 
-export function ToolImage({ url, name }: { url: string | null; name: string }) {
-  if (!url) {
-    return (
-      <div className="flex aspect-video items-center justify-center rounded-md bg-stone-100 text-stone-400">
-        <Wrench className="size-8" aria-hidden />
-      </div>
-    );
-  }
+export function ToolThumb({ url, name }: { url: string | null; name: string }) {
+  if (!url) return null;
   return (
     // Convex storage URLs are served from the deployment's own host.
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={url}
       alt={name}
-      className="aspect-video w-full rounded-md object-cover"
+      className="size-20 shrink-0 border border-ink/30 object-cover saturate-[0.8]"
     />
   );
 }
@@ -47,7 +45,7 @@ function RequestForm({ tool, onDone }: { tool: Tool; onDone: () => void }) {
 
   return (
     <form
-      className="mt-3 space-y-3 border-t border-stone-200 pt-3"
+      className="space-y-3 border border-ink bg-slip p-4"
       onSubmit={async (e) => {
         e.preventDefault();
         const ok = await run(() =>
@@ -56,8 +54,11 @@ function RequestForm({ tool, onDone }: { tool: Tool; onDone: () => void }) {
         if (ok) onDone();
       }}
     >
-      <div className="grid grid-cols-2 gap-2">
-        <label className="text-xs font-medium text-stone-600">
+      <p className="italic">
+        Put your name down for the {tool.name.toLowerCase()}.
+      </p>
+      <div className="grid max-w-sm grid-cols-2 gap-3">
+        <label className={fieldLabel}>
           From
           <input
             type="date"
@@ -68,18 +69,18 @@ function RequestForm({ tool, onDone }: { tool: Tool; onDone: () => void }) {
               setStartDate(e.target.value);
               if (e.target.value > endDate) setEndDate(e.target.value);
             }}
-            className={`mt-1 ${inputClass}`}
+            className={`mt-1 font-mono text-sm ${inputClass}`}
           />
         </label>
-        <label className="text-xs font-medium text-stone-600">
-          Until
+        <label className={fieldLabel}>
+          Back by
           <input
             type="date"
             required
             min={startDate}
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className={`mt-1 ${inputClass}`}
+            className={`mt-1 font-mono text-sm ${inputClass}`}
           />
         </label>
       </div>
@@ -89,46 +90,77 @@ function RequestForm({ tool, onDone }: { tool: Tool; onDone: () => void }) {
           Send request
         </button>
         <button type="button" onClick={onDone} className={buttonSecondary}>
-          Cancel
+          Never mind
         </button>
       </div>
     </form>
   );
 }
 
-function ToolCard({ tool }: { tool: Tool }) {
+function ToolRow({ tool }: { tool: Tool }) {
   const [requesting, setRequesting] = useState(false);
+  const owner = tool.owner?.name ?? "a neighbour";
   return (
-    <li className="rounded-lg border border-stone-200 bg-white p-4">
-      <ToolImage url={tool.imageUrl} name={tool.name} />
-      <div className="mt-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-medium">{tool.name}</p>
-          <p className="text-sm text-stone-500">
-            {tool.category} · {tool.condition}
-          </p>
-        </div>
-        <AvailabilityBadge available={tool.available} />
-      </div>
-      {tool.description && (
-        <p className="mt-2 text-sm text-stone-700">{tool.description}</p>
+    <>
+      <tr className={requesting ? "" : ledgerRow}>
+        <td className="py-3 pr-4">
+          <div className="flex items-start gap-3">
+            <ToolThumb url={tool.imageUrl} name={tool.name} />
+            <div className="min-w-0">
+              <span
+                className={
+                  tool.available ? "" : "text-ink-soft line-through decoration-1"
+                }
+              >
+                {tool.name}
+              </span>
+              <p className={meta}>
+                {tool.category} · {tool.condition.toLowerCase()}
+                <span className="sm:hidden">
+                  {" "}
+                  · {tool.isMine ? "yours" : owner}
+                  {!tool.available && " · out on loan"}
+                </span>
+              </p>
+              {tool.description && (
+                <p className="mt-1 text-[15px] text-ink-soft">
+                  {tool.description}
+                </p>
+              )}
+            </div>
+          </div>
+        </td>
+        <td className={`${meta} hidden py-3 pr-4 align-top sm:table-cell`}>
+          {tool.isMine ? "you" : owner}
+          {tool.owner?.trustedLender && <Trusted />}
+        </td>
+        <td className="py-3 text-right align-top whitespace-nowrap">
+          {tool.isMine ? (
+            <span className={meta}>your listing</span>
+          ) : (
+            <>
+              {!tool.available && (
+                <span className={`${meta} mr-3 hidden sm:inline`}>out on loan</span>
+              )}
+              <button
+                onClick={() => setRequesting(true)}
+                aria-expanded={requesting}
+                className={linkAction}
+              >
+                {tool.available ? "borrow →" : "ask for later →"}
+              </button>
+            </>
+          )}
+        </td>
+      </tr>
+      {requesting && (
+        <tr className={ledgerRow}>
+          <td colSpan={3} className="pb-4">
+            <RequestForm tool={tool} onDone={() => setRequesting(false)} />
+          </td>
+        </tr>
       )}
-      <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-stone-500">
-        {tool.isMine ? "Your listing" : `Lent by ${tool.owner?.name ?? "a neighbour"}`}
-        {tool.owner?.trustedLender && <TrustedBadge />}
-      </p>
-      {!tool.isMine &&
-        (requesting ? (
-          <RequestForm tool={tool} onDone={() => setRequesting(false)} />
-        ) : (
-          <button
-            onClick={() => setRequesting(true)}
-            className={`mt-3 ${buttonPrimary}`}
-          >
-            Request to borrow
-          </button>
-        ))}
-    </li>
+    </>
   );
 }
 
@@ -138,27 +170,43 @@ export function BrowseTools() {
 
   return (
     <section>
-      <label className="flex items-center gap-2 text-sm text-stone-600">
-        Category
-        <Select
-          value={category}
-          onChange={setCategory}
-          options={CATEGORIES}
-          allLabel="All"
-        />
-      </label>
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <h2 className="text-base italic text-ink-soft">Everything on the board</h2>
+        <label className={`${meta} flex items-center gap-2`}>
+          Category
+          <Select
+            value={category}
+            onChange={setCategory}
+            options={CATEGORIES}
+            allLabel="All"
+          />
+        </label>
+      </div>
       {tools === undefined ? (
-        <p className="mt-6 text-sm text-stone-500">Loading tools…</p>
+        <Note>Fetching the board…</Note>
       ) : tools.length === 0 ? (
-        <p className="mt-6 text-sm text-stone-500">
-          {category ? "No tools in this category yet." : "No tools listed yet."}
-        </p>
+        <Note>
+          {category
+            ? "Nobody has listed anything in this category yet."
+            : "The board is empty. List the first tool under My listings."}
+        </Note>
       ) : (
-        <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {tools.map((tool) => (
-            <ToolCard key={tool._id} tool={tool} />
-          ))}
-        </ul>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <th className={columnHead}>Tool</th>
+              <th className={`${columnHead} hidden sm:table-cell`}>Kept by</th>
+              <th className={columnHead}>
+                <span className="sr-only">Borrow</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {tools.map((tool) => (
+              <ToolRow key={tool._id} tool={tool} />
+            ))}
+          </tbody>
+        </table>
       )}
     </section>
   );

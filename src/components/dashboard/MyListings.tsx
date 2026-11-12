@@ -10,19 +10,24 @@ import {
 } from "@convex/lib/domain";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import {
-  AvailabilityBadge,
-  buttonDanger,
   buttonPrimary,
   buttonSecondary,
+  columnHead,
+  ConfirmAction,
   ErrorText,
+  fieldLabel,
   inputClass,
+  ledgerRow,
+  linkAction,
+  meta,
+  Note,
+  SectionTitle,
   Select,
   useRun,
 } from "../ui";
-import { ToolImage } from "./BrowseTools";
+import { ToolThumb } from "./BrowseTools";
 
 type Tool = FunctionReturnType<typeof api.tools.listMine>[number];
 
@@ -56,7 +61,7 @@ function ToolForm({ tool, onDone }: { tool?: Tool; onDone: () => void }) {
 
   return (
     <form
-      className="space-y-3 rounded-lg border border-stone-200 bg-white p-4"
+      className="max-w-xl space-y-4 border border-ink bg-slip p-5"
       onSubmit={async (e) => {
         e.preventDefault();
         const ok = await run(async () => {
@@ -74,19 +79,22 @@ function ToolForm({ tool, onDone }: { tool?: Tool; onDone: () => void }) {
         if (ok) onDone();
       }}
     >
-      <h3 className="font-semibold">{tool ? "Edit listing" : "Add a tool"}</h3>
-      <label className="block text-sm font-medium text-stone-700">
+      <h3 className="text-xl font-medium">
+        {tool ? "Amend this entry" : "Add a tool to the board"}
+      </h3>
+      <label className={fieldLabel}>
         Name
         <input
           required
           maxLength={80}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className={`mt-1 ${inputClass}`}
+          placeholder="Cordless drill"
+          className={`mt-1 font-serif text-ink ${inputClass}`}
         />
       </label>
-      <div className="flex flex-wrap gap-4">
-        <label className="block text-sm font-medium text-stone-700">
+      <div className="flex flex-wrap gap-5">
+        <label className={fieldLabel}>
           Category
           <div className="mt-1">
             <Select
@@ -96,7 +104,7 @@ function ToolForm({ tool, onDone }: { tool?: Tool; onDone: () => void }) {
             />
           </div>
         </label>
-        <label className="block text-sm font-medium text-stone-700">
+        <label className={fieldLabel}>
           Condition
           <div className="mt-1">
             <Select
@@ -107,78 +115,77 @@ function ToolForm({ tool, onDone }: { tool?: Tool; onDone: () => void }) {
           </div>
         </label>
       </div>
-      <label className="block text-sm font-medium text-stone-700">
+      <label className={fieldLabel}>
         Short description
         <textarea
-          rows={3}
+          rows={2}
           maxLength={300}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className={`mt-1 ${inputClass}`}
+          placeholder="18V, two batteries and a charger in the case."
+          className={`mt-1 font-serif text-ink ${inputClass}`}
         />
       </label>
-      <label className="block text-sm font-medium text-stone-700">
-        Photo {tool?.imageUrl ? "(leave empty to keep the current one)" : "(optional)"}
+      <label className={fieldLabel}>
+        Photo{" "}
+        {tool?.imageUrl ? "(leave empty to keep the current one)" : "(optional)"}
         <input
           type="file"
           accept="image/*"
           onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-          className="mt-1 block w-full text-sm"
+          className="mt-1 block w-full"
         />
       </label>
       <ErrorText error={error} />
       <div className="flex gap-2">
         <button type="submit" disabled={pending} className={buttonPrimary}>
-          {pending ? "Saving…" : tool ? "Save changes" : "Add tool"}
+          {pending ? "Saving…" : tool ? "Save changes" : "Add to the board"}
         </button>
         <button type="button" onClick={onDone} className={buttonSecondary}>
-          Cancel
+          Never mind
         </button>
       </div>
     </form>
   );
 }
 
-function ListingCard({ tool, onEdit }: { tool: Tool; onEdit: () => void }) {
+function ListingRow({ tool, onEdit }: { tool: Tool; onEdit: () => void }) {
   const removeTool = useMutation(api.tools.remove);
   const { run, error, pending } = useRun();
   return (
-    <li className="rounded-lg border border-stone-200 bg-white p-4">
-      <ToolImage url={tool.imageUrl} name={tool.name} />
-      <div className="mt-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-medium">{tool.name}</p>
-          <p className="text-sm text-stone-500">
-            {tool.category} · {tool.condition}
-          </p>
+    <tr className={ledgerRow}>
+      <td className="py-3 pr-4">
+        <div className="flex items-start gap-3">
+          <ToolThumb url={tool.imageUrl} name={tool.name} />
+          <div className="min-w-0">
+            {tool.name}
+            <p className={meta}>
+              {tool.category} · {tool.condition.toLowerCase()}
+            </p>
+            {tool.description && (
+              <p className="mt-1 text-[15px] text-ink-soft">{tool.description}</p>
+            )}
+            <ErrorText error={error} />
+          </div>
         </div>
-        <AvailabilityBadge available={tool.available} />
-      </div>
-      {tool.description && (
-        <p className="mt-2 text-sm text-stone-700">{tool.description}</p>
-      )}
-      <div className="mt-3 flex gap-2">
-        <button onClick={onEdit} className={buttonSecondary}>
-          <Pencil className="mr-1 inline size-4" aria-hidden />
-          Edit
-        </button>
-        <button
-          disabled={pending}
-          onClick={() => {
-            if (window.confirm(`Delete "${tool.name}"?`)) {
-              void run(() => removeTool({ toolId: tool._id }));
-            }
-          }}
-          className={buttonDanger}
-        >
-          <Trash2 className="mr-1 inline size-4" aria-hidden />
-          Delete
-        </button>
-      </div>
-      <div className="mt-2">
-        <ErrorText error={error} />
-      </div>
-    </li>
+      </td>
+      <td className={`${meta} py-3 pr-4 align-top whitespace-nowrap`}>
+        {tool.available ? "on the shelf" : "out on loan"}
+      </td>
+      <td className="py-3 text-right align-top whitespace-nowrap">
+        <span className="inline-flex items-center gap-4">
+          <button onClick={onEdit} className={linkAction}>
+            amend
+          </button>
+          <ConfirmAction
+            label="remove"
+            confirmLabel="yes, remove"
+            disabled={pending}
+            onConfirm={() => void run(() => removeTool({ toolId: tool._id }))}
+          />
+        </span>
+      </td>
+    </tr>
   );
 }
 
@@ -189,7 +196,7 @@ export function MyListings() {
   const editingTool = tools?.find((tool) => tool._id === editing);
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-6">
       {editing === "new" ? (
         <ToolForm onDone={() => setEditing(null)} />
       ) : editingTool ? (
@@ -200,28 +207,42 @@ export function MyListings() {
         />
       ) : (
         <button onClick={() => setEditing("new")} className={buttonPrimary}>
-          <Plus className="mr-1 inline size-4" aria-hidden />
-          Add a tool
+          + Add a tool
         </button>
       )}
 
-      {tools === undefined ? (
-        <p className="text-sm text-stone-500">Loading your listings…</p>
-      ) : tools.length === 0 ? (
-        <p className="text-sm text-stone-500">
-          You have not listed anything yet.
-        </p>
-      ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {tools.map((tool) => (
-            <ListingCard
-              key={tool._id}
-              tool={tool}
-              onEdit={() => setEditing(tool._id)}
-            />
-          ))}
-        </ul>
-      )}
+      <div>
+        <SectionTitle>What you lend</SectionTitle>
+        {tools === undefined ? (
+          <Note>Fetching your entries…</Note>
+        ) : tools.length === 0 ? (
+          <Note>
+            Nothing under your name yet. That drill you use twice a year would
+            be a good start.
+          </Note>
+        ) : (
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <th className={columnHead}>Tool</th>
+                <th className={columnHead}>Where</th>
+                <th className={columnHead}>
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {tools.map((tool) => (
+                <ListingRow
+                  key={tool._id}
+                  tool={tool}
+                  onEdit={() => setEditing(tool._id)}
+                />
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </section>
   );
 }

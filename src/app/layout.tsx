@@ -1,24 +1,35 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import type { ReactNode } from "react";
+import { IBM_Plex_Mono, Newsreader } from "next/font/google";
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
   subsets: ["latin"],
+  style: ["normal", "italic"],
+});
+
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
+  subsets: ["latin"],
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
-  title: "LendLoop: borrow tools from your neighbours",
+  title: "LendLoop: borrow what you need, lend what you don't",
   description:
-    "A neighbourhood tool-lending library. List what you own, borrow what you need.",
+    "A neighbourhood tool-lending board. List what you own, borrow what you need.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col bg-stone-50 text-stone-900">
+    <html
+      lang="en"
+      className={`${newsreader.variable} ${plexMono.variable} h-full antialiased`}
+    >
+      <body className="flex min-h-full flex-col bg-paper font-serif text-[17px] text-ink">
         <ClerkProvider>
           <ConvexClientProvider>{children}</ConvexClientProvider>
         </ClerkProvider>

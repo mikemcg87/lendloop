@@ -1,5 +1,21 @@
 @import "tailwindcss";
 
+/* Ledger: ink on paper. One serif for reading, one mono for facts (dates,
+   labels, actions). The only colour is the stamp red, used for "overdue"
+   and destructive actions. */
 @theme inline {
-  --font-sans: var(--font-geist-sans);
+  --font-serif: var(--font-newsreader), Georgia, serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  --color-paper: #f4efe4;
+  --color-paper-deep: #efe8d9;
+  --color-slip: #f8f4ea;
+  --color-ink: #1d1a16;
+  --color-ink-soft: #5b5346;
+  --color-stamp: #a8321f;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
 }

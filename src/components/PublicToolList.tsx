@@ -4,19 +4,19 @@ import { api } from "@convex/_generated/api";
 import { CATEGORIES, type Category } from "@convex/lib/domain";
 import { useQuery } from "convex/react";
 import { useState } from "react";
-import { Select } from "./ui";
+import { columnHead, ledgerRow, meta, Note, Select } from "./ui";
 
 export function PublicToolList() {
   const [category, setCategory] = useState<Category | undefined>();
   const tools = useQuery(api.tools.listPublic, { category });
 
   return (
-    <section aria-labelledby="tools-heading">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 id="tools-heading" className="text-xl font-semibold">
-          Available to borrow right now
+    <section aria-labelledby="shelf-heading">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <h2 id="shelf-heading" className="text-base italic text-ink-soft">
+          On the shelf today
         </h2>
-        <label className="flex items-center gap-2 text-sm text-stone-600">
+        <label className={`${meta} flex items-center gap-2`}>
           Category
           <Select
             value={category}
@@ -28,23 +28,26 @@ export function PublicToolList() {
       </div>
 
       {tools === undefined ? (
-        <p className="mt-6 text-sm text-stone-500">Loading tools…</p>
+        <Note>Fetching the shelf…</Note>
       ) : tools.length === 0 ? (
-        <p className="mt-6 text-sm text-stone-500">
-          Nothing available here right now. Sign in and be the first to lend.
-        </p>
+        <Note>Nothing on the shelf here yet. Sign in and lend the first tool.</Note>
       ) : (
-        <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {tools.map((tool) => (
-            <li
-              key={tool._id}
-              className="rounded-lg border border-stone-200 bg-white p-4"
-            >
-              <p className="truncate font-medium">{tool.name}</p>
-              <p className="text-sm text-stone-500">{tool.category}</p>
-            </li>
-          ))}
-        </ul>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <th className={columnHead}>Tool</th>
+              <th className={`${columnHead} text-right`}>Category</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tools.map((tool) => (
+              <tr key={tool._id} className={ledgerRow}>
+                <td className="py-2.5 pr-4">{tool.name}</td>
+                <td className={`${meta} py-2.5 text-right`}>{tool.category}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </section>
   );

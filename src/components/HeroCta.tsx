@@ -5,7 +5,7 @@ import { Authenticated, Unauthenticated } from "convex/react";
 import Link from "next/link";
 
 const cta =
-  "inline-block rounded-md bg-emerald-700 px-5 py-3 font-medium text-white hover:bg-emerald-800";
+  "inline-block border border-ink bg-ink px-5 py-3 font-mono text-sm text-paper hover:bg-ink-soft";
 
 export function HeroCta() {
   return (
@@ -17,7 +17,7 @@ export function HeroCta() {
       </Unauthenticated>
       <Authenticated>
         <Link href="/dashboard" className={cta}>
-          Go to your dashboard
+          Open the board
         </Link>
       </Authenticated>
     </>
