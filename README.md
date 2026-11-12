@@ -22,6 +22,7 @@ Built with Next.js 16 (App Router), Clerk, Convex, n8n and TypeScript.
 **[lendloop-alpha-lemon.vercel.app](https://lendloop-alpha-lemon.vercel.app)**: the app on Vercel, a Convex cloud deployment and the three workflows on a self-hosted n8n.
 
 - **Sign up with any email.** A new account is given an overdue loan (a sander from a demo neighbour) and an incoming request for a ladder listed in its name, so one account can approve or decline, mark a loan returned, note damage and see the overdue stamp.
+- **Admin login:** `demo-admin+clerk_test@example.com` / `lendlooptakehome123`. If Clerk asks for an emailed code, enter `424242` (it is a Clerk test address). The admin role is granted in Clerk metadata, which only the secret key can write, so an account you create yourself is always an ordinary user. On this demo the admin's member list shows names without emails.
 - **The demo resets every day at 04:00 UTC.** Accounts, listings, loans and uploads are wiped and the neighbours' board is restored. Sign in again for a fresh start.
 - **Notifications go to a mock sink, not to your inbox.** Each loan shows what n8n reported back ("notification sent", "reminder sent"). The overdue job runs daily at 08:00 UK time.
 - **Listing photos are AI-generated stand-ins.**
