@@ -26,6 +26,10 @@ const AOIFE: SeedTool[] = [
   { photo: "hedge-trimmer", name: "Hedge trimmer", category: "Garden", condition: "Good", description: "Electric, 50cm blade. Extension lead included." },
   { photo: "camping-stove", name: "Two-ring camping stove", category: "Camping", condition: "Like new", description: "Gas not included." },
   { photo: "stand-mixer", name: "Stand mixer", category: "Kitchen", condition: "Fair", description: "Works well, bowl has a small dent." },
+  { photo: "pineapple", name: "Pineapple", category: "Kitchen", condition: "Like new", description: "One pineapple. Not strictly a tool. Please bring it back uneaten." },
+  { photo: "pasta-machine", name: "Pasta machine", category: "Kitchen", condition: "Like new", description: "Hand-cranked, clamps to a table. Makes sheets, tagliatelle and a mess." },
+  { photo: "paint-roller", name: "Roller, tray and extension pole", category: "Painting", condition: "Good", description: "Pole reaches a normal ceiling. Sleeve is washed but not new." },
+  { photo: "jump-leads", name: "Jump leads", category: "Automotive", condition: "Good", description: "Three metres, fine for a petrol car. Instructions are in the bag." },
 ];
 const SANDER: SeedTool = { photo: "orbital-sander", name: "Orbital sander", category: "Power Tools", condition: "Good", description: "Takes 125mm discs. A few spare discs in the case." };
 const DECLAN: SeedTool[] = [
@@ -34,6 +38,8 @@ const DECLAN: SeedTool[] = [
   { photo: "tent", name: "Four-person tent", category: "Camping", condition: "Like new", description: "Used twice. All the pegs are there, I counted." },
   { photo: "wallpaper-steamer", name: "Wallpaper steamer", category: "Painting", condition: "Fair", description: "Takes ten minutes to heat up. Mind the hose, it gets hot." },
   { photo: "socket-set", name: "Socket set", category: "Automotive", condition: "Well used", description: "Metric, 8 to 24mm. The 10mm is missing, as is tradition." },
+  { photo: "lawnmower", name: "Electric lawnmower", category: "Garden", condition: "Good", description: "Fine for a small lawn. Bring your own extension lead." },
+  { photo: "spirit-level", name: "Spirit level", category: "Hand Tools", condition: "Good", description: "1.2 metres. Long enough for shelves and a door frame." },
   { photo: "wheelbarrow", name: "Wheelbarrow", category: "Garden", condition: "Well used", description: "Solid tyre, so no punctures. A bit rusty but sound." },
 ];
 const LADDER: SeedTool = { photo: "extension-ladder", name: "Extension ladder", category: "Hand Tools", condition: "Good", description: "Reaches a first-floor gutter. Listed for you by the demo data." };

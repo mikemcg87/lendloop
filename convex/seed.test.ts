@@ -36,7 +36,7 @@ describe("seed.demo", () => {
     await t.action(internal.seed.demo, args);
     expect(await t.action(internal.seed.demo, args)).toBe("Demo data already present.");
     const after = await counts();
-    expect(after.tools).toHaveLength(11);
+    expect(after.tools).toHaveLength(17);
     expect(after.requests).toBe(2);
   });
 });
@@ -73,7 +73,7 @@ describe("demo deployment", () => {
       requests: 0,
       files: 0,
     });
-    expect((await counts()).tools).toHaveLength(9);
+    expect((await counts()).tools).toHaveLength(15);
   });
 
   it("gives each new account its own overdue loan and incoming request, once", async () => {

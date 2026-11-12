@@ -117,7 +117,7 @@ Open [http://localhost:3000](http://localhost:3000) and sign in.
 npx convex run seed:demo '{"borrowerEmail":"the-email-you-signed-in-with","photosFrom":"http://localhost:3000"}'
 ```
 
-This adds two demo neighbours with ten tools between them, a loan to you that is already overdue (for the reminder workflow), and a request from a neighbour for a ladder of yours (so you can approve or decline it, then mark it returned and note any damage). Sign in first: the seed creates nothing until it finds your account.
+This adds two demo neighbours with sixteen listings between them (one of them a pineapple), a loan to you that is already overdue (for the reminder workflow), and a request from a neighbour for a ladder of yours (so you can approve or decline it, then mark it returned and note any damage). Sign in first: the seed creates nothing until it finds your account.
 
 `photosFrom` is where the app is running; the seed copies the photos in `public/demo` from there into Convex file storage. Those photos are AI-generated stand-ins, not real listings.
 

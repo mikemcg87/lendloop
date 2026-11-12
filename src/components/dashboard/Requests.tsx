@@ -49,7 +49,11 @@ function history(loan: Loan, viewer: Viewer): Entry[] {
   const entries: Entry[] = [
     {
       text: `${borrower} asked to borrow it`,
-      when: formatDay(loan._creationTime),
+      // No date when the loan was recorded after it began (seeded demo loans).
+      when:
+        new Date(loan._creationTime).toISOString().slice(0, 10) <= loan.startDate
+          ? formatDay(loan._creationTime)
+          : undefined,
       note: notified("requested"),
     },
   ];
