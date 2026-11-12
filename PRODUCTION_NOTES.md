@@ -1,16 +1,20 @@
 # What I would change to run this in production
 
-LendLoop as submitted is a working take-home: correct access control, a tested backend and automation that has been run end to end. It is not production-ready. This note lists what I would change, most important first, and why.
+LendLoop as submitted is a working take-home: access control enforced on the server, a tested backend and automation that has been run end to end. It is not production-ready. This note lists what I would change, most important first, and why.
 
 ## 1. Before any real user touches it
 
 **Environments and secrets.** Separate Clerk, Convex and n8n instances for staging and production. Secrets in a secrets manager rather than `.env` files, with the HMAC secret rotated on a schedule: the endpoints would accept two secrets during a rotation window, identified by a key-id header.
 
-**Move n8n secrets into n8n credentials.** The workflows read the shared secret with `$env`, which keeps it out of the exported JSON and makes the docker-compose setup one command. On n8n Cloud, or with env access disabled, I would switch the Crypto nodes to n8n's encrypted credential store and put the notification provider's token in a credential too.
+**Move the HMAC secret into an n8n credential.** The AWS key for SES already lives in n8n's encrypted credential store. The shared HMAC secret is read with `$env`, which keeps it out of the exported JSON and makes the docker-compose setup one command. On n8n Cloud, or with env access disabled, I would move it into a credential as well.
+
+**Email from a domain I control.** SES is in sandbox mode and the sender is a single verified address. Production needs a verified domain with DKIM, SPF and DMARC, SES production access, and bounce and complaint handling wired back to the user record.
+
+**Content-Security-Policy.** The app sets the baseline response headers but no CSP, because Clerk and Convex need per-deployment origins. I would add a nonce-based policy in the proxy, start it in report-only mode, and enforce it once the reports are clean.
 
 **Rate limiting and abuse controls.** Per-user limits on creating listings, sending borrow requests and requesting upload URLs (Convex's rate-limiter component). Today a signed-in user can do all three without limit.
 
-**Upload hardening.** Validate content type and size server-side, tie each stored file to its uploader, and delete replaced or orphaned files. Currently any signed-in user can obtain an upload URL and old photos are never cleaned up.
+**Upload hardening.** A photo's type and size are checked when it is attached to a listing. I would also tie each stored file to its uploader, delete replaced or orphaned files, and move photos to S3 behind presigned URLs with the limits enforced by the upload policy itself, so an oversized file is refused before it is stored.
 
 **Account lifecycle.** Sync user updates and deletions from Clerk by webhook instead of only upserting on sign-in, so a deleted account is removed or anonymised in Convex and profile changes propagate.
 
@@ -18,9 +22,11 @@ LendLoop as submitted is a working take-home: correct access control, a tested b
 
 ## 2. Reliability of the automation
 
-**Transactional outbox for notifications.** Convex currently retries the webhook five times and then logs the failure. I would write each event to an `outbox` table inside the mutation and deliver from there, recording attempts. That gives a dead-letter queue, replay after an n8n outage, and a place to see what is stuck.
+**Transactional outbox for notifications.** Convex currently retries the webhook five times and then records the failure on the loan. I would write each event to an `outbox` table inside the mutation and deliver from there, recording attempts. That gives a dead-letter queue, replay after an n8n outage, and a place to see what is stuck.
 
 **Close the at-most-once gap on reminders.** A reminder is claimed before it is sent so that retries cannot duplicate it. If the send then fails for good, that day's reminder is lost until tomorrow's run (the error workflow reports it). With an outbox, a failed send would release its claim and be retried safely.
+
+**Isolate a failing loan.** The overdue job handles loans one at a time, so a retry never repeats a loan that already succeeded. A loan that still fails stops the run, and the loans behind it wait for the next day. I would route a failed loan to an error branch and carry on with the rest.
 
 **n8n in queue mode.** Redis-backed workers and a separate webhook process, so a burst of status changes does not queue behind long executions, with Postgres instead of SQLite and execution data pruned on a schedule.
 
@@ -61,7 +67,7 @@ LendLoop as submitted is a working take-home: correct access control, a tested b
 
 ## 6. Engineering process
 
-- CI running typecheck, lint and the test suite on every pull request, with preview deployments.
+- CI already runs lint, the type check, the tests and `npm audit` on every push. I would add preview deployments and a production build to it.
 - Playwright tests for the flows the backend tests cannot see: sign-in, borrow, approve and return across two accounts.
 - Dependency and secret scanning, and pinned image digests for n8n.
 - The n8n workflows exported from the running instance by a CI job, so the JSON in the repository cannot drift from what is deployed.
