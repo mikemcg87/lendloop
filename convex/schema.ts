@@ -44,7 +44,11 @@ export default defineSchema({
     startDate: v.string(),
     endDate: v.string(),
     status: requestStatusValidator,
+    // When the owner accepted/declined, or the borrower withdrew.
+    decidedAt: v.optional(v.number()),
     returnedAt: v.optional(v.number()),
+    // The owner's note on the state the tool came back in, if any.
+    returnNote: v.optional(v.string()),
     // Date of the last overdue reminder, written by the n8n daily job. Makes
     // the write-back idempotent per (request, day).
     lastReminderDate: v.optional(v.string()),

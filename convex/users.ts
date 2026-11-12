@@ -1,4 +1,5 @@
 import { ConvexError } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { getSession } from "./lib/auth";
 
@@ -27,11 +28,16 @@ export const store = mutation({
       await ctx.db.patch(existing._id, profile);
       return existing._id;
     }
-    return await ctx.db.insert("users", {
+    const userId = await ctx.db.insert("users", {
       tokenIdentifier: identity.tokenIdentifier,
       trustedLender: false,
       ...profile,
     });
+    // Public demo deployments only: see seed.ts.
+    if (process.env.DEMO_MODE) {
+      await ctx.scheduler.runAfter(0, internal.seed.welcome, { userId });
+    }
+    return userId;
   },
 });
 

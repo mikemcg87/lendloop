@@ -11,9 +11,12 @@ import {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const RETURN_NOTE_MAX = 300;
 
 function assertIsoDate(value: string) {
-  if (!ISO_DATE.test(value) || Number.isNaN(Date.parse(value))) {
+  // Date.parse accepts "2026-02-31" and rolls it into March, so round-trip.
+  const time = ISO_DATE.test(value) ? Date.parse(value) : NaN;
+  if (Number.isNaN(time) || new Date(time).toISOString().slice(0, 10) !== value) {
     throw new ConvexError("Dates must be valid YYYY-MM-DD values.");
   }
 }
@@ -135,14 +138,23 @@ export const respond = mutation({
   },
 });
 
+// The owner can record damage or missing parts when the tool comes back. The
+// note stays on the loan for both parties and admins; it is not sent to n8n.
 export const markReturned = mutation({
-  args: { requestId: v.id("requests") },
+  args: { requestId: v.id("requests"), note: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const session = await requireUser(ctx);
     const request = await getRequestAsOwner(ctx, session, args.requestId);
     if (request.status !== "accepted" && request.status !== "overdue") {
       throw new ConvexError("Only an active loan can be marked returned.");
     }
+    const note = args.note?.trim();
+    if (note && note.length > RETURN_NOTE_MAX) {
+      throw new ConvexError(
+        `The note must be ${RETURN_NOTE_MAX} characters or fewer.`,
+      );
+    }
+    if (note) await ctx.db.patch(request._id, { returnNote: note });
     await setRequestStatus(ctx, request, "returned");
   },
 });

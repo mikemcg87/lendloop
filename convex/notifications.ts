@@ -97,7 +97,15 @@ export const dispatch = internalAction({
 
     const nextAttempt = args.attempt + 1;
     if (nextAttempt >= MAX_ATTEMPTS) {
+      // n8n never ran, so its error workflow cannot report this. Put the
+      // failure on the loan where both parties and admins can see it.
       console.error(`Notification ${data.eventId} failed for good: ${failure}`);
+      await ctx.runMutation(internal.automation.record, {
+        requestId: args.requestId,
+        kind: "notification_failed",
+        key: `${data.eventId}:failed`,
+        status: args.event,
+      });
       return;
     }
     console.warn(`Notification ${data.eventId} failed (${failure}); retrying.`);

@@ -46,7 +46,9 @@ export const listUsers = query({
       page: result.page.map((user) => ({
         _id: user._id,
         name: user.name,
-        email: user.email,
+        // A public demo hands out its admin login, so it must not show the
+        // addresses of the people who signed up.
+        email: process.env.DEMO_MODE ? undefined : user.email,
         imageUrl: user.imageUrl,
         trustedLender: user.trustedLender,
       })),

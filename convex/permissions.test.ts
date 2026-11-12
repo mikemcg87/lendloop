@@ -368,3 +368,48 @@ describe("users.store", () => {
     expect((await t.run((ctx) => ctx.db.get(id)))?.trustedLender).toBe(true);
   });
 });
+
+describe("email privacy", () => {
+  it("keeps email addresses out of ordinary and admin loan views", async () => {
+    const { owner, borrower, stranger, admin, toolId, addRequest } = await setup();
+    await addRequest(toolId, owner.userId, borrower.userId, { status: "accepted" });
+    const mine = await borrower.as.query(api.requests.listMine, {});
+    const incoming = await owner.as.query(api.requests.listIncoming, {});
+    const browsed = await stranger.as.query(api.tools.browse, {});
+    const loans = await admin.as.query(api.admin.listLoans, { paginationOpts: page });
+    expect([mine.length, incoming.length, browsed.length, loans.page.length]).toEqual([
+      1, 1, 1, 1,
+    ]);
+    for (const result of [mine, incoming, browsed, loans]) {
+      expect(JSON.stringify(result)).not.toContain("@example.com");
+    }
+  });
+});
+
+describe("tools.create photo validation", () => {
+  const fields = {
+    name: "Saw",
+    category: "Hand Tools",
+    condition: "Good",
+    description: "",
+  } as const;
+
+  it("rejects a stored file that is not an image", async () => {
+    const { t, owner } = await setup();
+    const imageStorageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["x"], { type: "text/plain" })),
+    );
+    expect(
+      await errorMessage(owner.as.mutation(api.tools.create, { ...fields, imageStorageId })),
+    ).toBe("The photo must be an image file.");
+  });
+
+  it("accepts a stored image", async () => {
+    const { t, owner } = await setup();
+    const imageStorageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["x"], { type: "image/png" })),
+    );
+    const toolId = await owner.as.mutation(api.tools.create, { ...fields, imageStorageId });
+    expect((await t.run((ctx) => ctx.db.get(toolId)))?.imageStorageId).toBe(imageStorageId);
+  });
+});

@@ -56,6 +56,33 @@ describe("loan state machine", () => {
     expect((await t.run((ctx) => ctx.db.get(toolId)))?.status).toBe("available");
   });
 
+  it("keeps the owner's damage note and shows it to both parties", async () => {
+    const { owner, borrower, requestId } = await accepted();
+    await owner.as.mutation(api.requests.markReturned, {
+      requestId,
+      note: "  One rubber foot is missing.  ",
+    });
+    const mine = await borrower.as.query(api.requests.listMine, {});
+    const incoming = await owner.as.query(api.requests.listIncoming, {});
+    expect(mine[0].returnNote).toBe("One rubber foot is missing.");
+    expect(incoming[0].returnNote).toBe("One rubber foot is missing.");
+  });
+
+  it("stores no note when it is blank, and rejects one that is too long", async () => {
+    const { t, owner, requestId } = await accepted();
+    expect(
+      await errorMessage(
+        owner.as.mutation(api.requests.markReturned, {
+          requestId,
+          note: "x".repeat(301),
+        }),
+      ),
+    ).toBe("The note must be 300 characters or fewer.");
+    expect((await t.run((ctx) => ctx.db.get(requestId)))?.status).toBe("accepted");
+    await owner.as.mutation(api.requests.markReturned, { requestId, note: "   " });
+    expect((await t.run((ctx) => ctx.db.get(requestId)))?.returnNote).toBeUndefined();
+  });
+
   it("can mark an overdue loan returned", async () => {
     const { t, owner, addRequest, toolId, borrower } = await setup();
     await t.run((ctx) => ctx.db.patch(toolId, { status: "on_loan" }));
@@ -174,6 +201,21 @@ describe("request date validation", () => {
     expect(await errorMessage(request(borrower, dayOffset(1), bad))).toBe(
       "Dates must be valid YYYY-MM-DD values.",
     );
+  });
+
+  it.each([["2099-02-31"], ["2099-13-01"]])(
+    "rejects the impossible calendar date %s",
+    async (bad) => {
+      const { request, borrower } = await setup();
+      const message = "Dates must be valid YYYY-MM-DD values.";
+      expect(await errorMessage(request(borrower, bad, "2099-12-31"))).toBe(message);
+      expect(await errorMessage(request(borrower, dayOffset(1), bad))).toBe(message);
+    },
+  );
+
+  it("accepts a real leap day", async () => {
+    const { request, borrower } = await setup();
+    await expect(request(borrower, "2096-02-29", "2096-02-29")).resolves.toBeDefined();
   });
 
   it("rejects a start date well in the past", async () => {

@@ -10,9 +10,13 @@ export async function setRequestStatus(
   request: Doc<"requests">,
   status: RequestStatus,
 ) {
+  const now = Date.now();
   await ctx.db.patch(request._id, {
     status,
-    ...(status === "returned" ? { returnedAt: Date.now() } : {}),
+    ...(status === "returned" ? { returnedAt: now } : {}),
+    ...(status === "accepted" || status === "rejected" || status === "cancelled"
+      ? { decidedAt: now }
+      : {}),
   });
   if (status === "accepted") {
     await ctx.db.patch(request.toolId, { status: "on_loan" });
@@ -76,7 +80,7 @@ export async function enrichRequest(ctx: QueryCtx, request: Doc<"requests">) {
       .query("automationEvents")
       .withIndex("by_request", (q) => q.eq("requestId", request._id))
       .order("desc")
-      .take(3),
+      .take(40),
   ]);
   return {
     // Most recent deliveries reported back by n8n, newest first.
@@ -90,7 +94,9 @@ export async function enrichRequest(ctx: QueryCtx, request: Doc<"requests">) {
     status: request.status,
     startDate: request.startDate,
     endDate: request.endDate,
+    decidedAt: request.decidedAt,
     returnedAt: request.returnedAt,
+    returnNote: request.returnNote,
     tool: tool && {
       _id: tool._id,
       name: tool.name,

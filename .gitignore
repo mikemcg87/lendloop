@@ -43,3 +43,6 @@ next-env.d.ts
 
 # re-created by `next dev`
 AGENTS.md
+
+# n8n credentials with real AWS keys
+n8n/credentials.json

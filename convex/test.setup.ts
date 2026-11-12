@@ -5,7 +5,7 @@ import { afterEach, beforeEach, vi } from "vitest";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 
-const modules = import.meta.glob("./**/!(*.*.*)*.*s");
+const modules = import.meta.glob(["./**/*.{ts,js}", "!./**/*.test.ts"]);
 
 export type Harness = ReturnType<typeof createBackend>;
 

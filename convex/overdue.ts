@@ -45,9 +45,9 @@ export const listDue = internalQuery({
   },
 });
 
-// Claims today's reminder for a loan and flips it to overdue. Idempotent per
-// (requestId, runDate): only the first call returns `claimed: true`, so a
-// retried or re-run workflow never sends a second reminder for the same day.
+// Claims a day's reminder for a loan and flips it to overdue. Only the first
+// call for a loan and day returns `claimed: true`, so a retried or re-run
+// workflow never sends a second reminder for the same day.
 // A loan returned in the meantime is left alone.
 export const claimReminder = internalMutation({
   args: { requestId: v.string(), runDate: v.string() },
@@ -55,7 +55,12 @@ export const claimReminder = internalMutation({
     const id = ctx.db.normalizeId("requests", requestId);
     const request = id && (await ctx.db.get(id));
     if (!request) return { claimed: false, result: "not_found" as const };
-    if (request.lastReminderDate === runDate) {
+    // ">=" rather than "===": a late call for an earlier day must not move
+    // the marker backwards and reopen today's reminder.
+    if (
+      request.lastReminderDate !== undefined &&
+      request.lastReminderDate >= runDate
+    ) {
       return { claimed: false, result: "already_claimed" as const };
     }
     if (request.status === "accepted" && request.endDate < runDate) {

@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
 import {
@@ -11,6 +11,20 @@ import { archiveTool, hasActiveLoan } from "./lib/loans";
 
 const NAME_MAX = 80;
 const DESCRIPTION_MAX = 300;
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+// The upload URL accepts any file, so check what actually arrived before a
+// listing is allowed to point at it.
+async function assertImage(ctx: QueryCtx, storageId: Id<"_storage">) {
+  const file = await ctx.db.system.get(storageId);
+  if (!file) throw new ConvexError("Photo upload not found.");
+  if (!file.contentType?.startsWith("image/")) {
+    throw new ConvexError("The photo must be an image file.");
+  }
+  if (file.size > IMAGE_MAX_BYTES) {
+    throw new ConvexError("The photo must be 5 MB or smaller.");
+  }
+}
 
 function cleanFields(name: string, description: string) {
   const trimmedName = name.trim();
@@ -108,7 +122,7 @@ export const listMine = query({
       .query("tools")
       .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
       .order("desc")
-      .collect();
+      .take(200);
     return await Promise.all(
       tools
         .filter((tool) => tool.deletedAt === undefined)
@@ -135,6 +149,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
+    if (args.imageStorageId) await assertImage(ctx, args.imageStorageId);
     return await ctx.db.insert("tools", {
       ownerId: user._id,
       ...cleanFields(args.name, args.description),
@@ -171,6 +186,7 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const session = await requireUser(ctx);
     const tool = await getOwnedTool(ctx, session, args.toolId);
+    if (args.imageStorageId) await assertImage(ctx, args.imageStorageId);
     await ctx.db.patch(tool._id, {
       ...cleanFields(args.name, args.description),
       category: args.category,

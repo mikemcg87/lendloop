@@ -42,9 +42,12 @@ export type RequestStatus = Infer<typeof requestStatusValidator>;
 // A loan is "active" (the tool is physically out) in these states.
 export const ACTIVE_LOAN_STATUSES: RequestStatus[] = ["accepted", "overdue"];
 
-// Things n8n reports back after it has actually delivered something.
+// What automation did for a loan. The "sent" kinds are reported back by n8n
+// after a delivery; "notification_failed" is recorded by Convex when the
+// webhook to n8n could not be delivered after all retries.
 export const automationKindValidator = v.union(
   v.literal("notification_sent"),
   v.literal("reminder_sent"),
+  v.literal("notification_failed"),
 );
 export type AutomationKind = Infer<typeof automationKindValidator>;

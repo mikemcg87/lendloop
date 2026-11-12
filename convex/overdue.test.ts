@@ -91,6 +91,21 @@ describe("overdue.claimReminder", () => {
     });
   });
 
+  it("does not let a stale run date reopen a newer claim", async () => {
+    const { t, loan } = await setup();
+    const requestId = await loan({
+      status: "overdue",
+      endDate: dayOffset(-4),
+      lastReminderDate: today,
+    });
+    expect(
+      await t.mutation(internal.overdue.claimReminder, { requestId, runDate: yesterday }),
+    ).toEqual({ claimed: false, result: "already_claimed" });
+    const doc = await t.run((ctx) => ctx.db.get(requestId));
+    expect(doc?.lastReminderDate).toBe(today);
+    expect(await t.query(internal.overdue.listDue, { today })).toEqual([]);
+  });
+
   it("claims an already-overdue loan on a new run date", async () => {
     const { t, loan } = await setup();
     const requestId = await loan({

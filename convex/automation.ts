@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import { automationKindValidator, requestStatusValidator } from "./lib/domain";
 
-// Records that n8n delivered something for a loan. Idempotent on `key`, so a
+// Records an automation outcome for a loan. Idempotent on `key`, so a
 // retried write-back never creates a second row.
 export const record = internalMutation({
   args: {
