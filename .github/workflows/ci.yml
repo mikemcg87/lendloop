@@ -21,4 +21,11 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # Placeholder values: the build only needs these to be present and
+      # well-formed. Nothing is contacted with them.
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_CONVEX_URL: https://example.convex.cloud
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk
+          CLERK_SECRET_KEY: sk_test_placeholder
       - run: npm audit --audit-level=moderate

@@ -13,6 +13,7 @@ import type * as automation from "../automation.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_demo from "../lib/demo.js";
 import type * as lib_domain from "../lib/domain.js";
 import type * as lib_hmac from "../lib/hmac.js";
 import type * as lib_loans from "../lib/loans.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   http: typeof http;
   "lib/auth": typeof lib_auth;
+  "lib/demo": typeof lib_demo;
   "lib/domain": typeof lib_domain;
   "lib/hmac": typeof lib_hmac;
   "lib/loans": typeof lib_loans;

@@ -2,6 +2,7 @@ import { ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { getSession } from "./lib/auth";
+import { isDemo } from "./lib/demo";
 
 // Called by the client right after sign-in. Everything is taken from the
 // verified identity, never from arguments, so a caller can only upsert
@@ -34,7 +35,7 @@ export const store = mutation({
       ...profile,
     });
     // Public demo deployments only: see seed.ts.
-    if (process.env.DEMO_MODE) {
+    if (isDemo()) {
       await ctx.scheduler.runAfter(0, internal.seed.welcome, { userId });
     }
     return userId;

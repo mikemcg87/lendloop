@@ -2,6 +2,7 @@ import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin } from "./lib/auth";
+import { isDemo } from "./lib/demo";
 import { requestStatusValidator } from "./lib/domain";
 import { archiveTool, enrichRequest } from "./lib/loans";
 
@@ -16,19 +17,83 @@ export const listLoans = query({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const { status } = args;
-    const result = status
-      ? await ctx.db
+    // A loan past its due date is overdue from that moment, though the stored
+    // status only changes when the daily job runs. Filter on what the loan
+    // slip shows: "overdue" includes accepted loans past due, "on loan" does
+    // not.
+    const today = new Date().toISOString().slice(0, 10);
+    let result;
+    if (status === "overdue") {
+      const [late, marked] = await Promise.all([
+        ctx.db
           .query("requests")
-          .withIndex("by_status_end_date", (q) => q.eq("status", status))
+          .withIndex("by_status_end_date", (q) =>
+            q.eq("status", "accepted").lt("endDate", today),
+          )
           .order("desc")
-          .paginate(args.paginationOpts)
-      : await ctx.db
+          .take(100),
+        ctx.db
           .query("requests")
+          .withIndex("by_status_end_date", (q) => q.eq("status", "overdue"))
           .order("desc")
-          .paginate(args.paginationOpts);
+          .take(100),
+      ]);
+      result = { page: [...marked, ...late], isDone: true, continueCursor: "" };
+    } else if (status === "accepted") {
+      result = await ctx.db
+        .query("requests")
+        .withIndex("by_status_end_date", (q) =>
+          q.eq("status", "accepted").gte("endDate", today),
+        )
+        .order("desc")
+        .paginate(args.paginationOpts);
+    } else if (status) {
+      result = await ctx.db
+        .query("requests")
+        .withIndex("by_status_end_date", (q) => q.eq("status", status))
+        .order("desc")
+        .paginate(args.paginationOpts);
+    } else {
+      result = await ctx.db
+        .query("requests")
+        .order("desc")
+        .paginate(args.paginationOpts);
+    }
     return {
       ...result,
       page: await Promise.all(result.page.map((r) => enrichRequest(ctx, r))),
+    };
+  },
+});
+
+// Every live listing, including ones the member board hides from other
+// accounts, so an admin can reach anything they are allowed to remove.
+export const listListings = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const result = await ctx.db
+      .query("tools")
+      .withIndex("by_deleted_category", (q) => q.eq("deletedAt", undefined))
+      .order("desc")
+      .paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: await Promise.all(
+        result.page.map(async (tool) => {
+          const owner = await ctx.db.get(tool.ownerId);
+          return {
+            _id: tool._id,
+            name: tool.name,
+            category: tool.category,
+            available: tool.status === "available",
+            owner: owner && {
+              name: owner.name,
+              trustedLender: owner.trustedLender,
+            },
+          };
+        }),
+      ),
     };
   },
 });
@@ -48,7 +113,7 @@ export const listUsers = query({
         name: user.name,
         // A public demo hands out its admin login, so it must not show the
         // addresses of the people who signed up.
-        email: process.env.DEMO_MODE ? undefined : user.email,
+        email: isDemo() ? undefined : user.email,
         imageUrl: user.imageUrl,
         trustedLender: user.trustedLender,
       })),

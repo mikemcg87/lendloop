@@ -1,10 +1,29 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  type QueryCtx,
+} from "./_generated/server";
 
 const BATCH = 500;
 
+// The idempotency key n8n reports a day's reminder under (workflow 2,
+// "Build activity report"). Its presence means that reminder was delivered.
+export const reminderKey = (requestId: string, runDate: string) =>
+  `${requestId}:reminder:${runDate}`;
+
+async function delivered(ctx: QueryCtx, requestId: string, runDate: string) {
+  const event = await ctx.db
+    .query("automationEvents")
+    .withIndex("by_key", (q) => q.eq("key", reminderKey(requestId, runDate)))
+    .first();
+  return event !== null;
+}
+
 // Loans that need a reminder on `today`: accepted loans past their end date
-// plus loans already marked overdue, minus any already claimed today.
+// plus loans already marked overdue, minus any whose reminder for today has
+// been delivered. A loan claimed today with no delivery on record stays in
+// the list, so a run that died between claiming and sending is picked up.
 // Returns only what the reminder needs: the borrower's contact, the tool and
 // owner names, and the due date.
 export const listDue = internalQuery({
@@ -22,9 +41,15 @@ export const listDue = internalQuery({
         .withIndex("by_status_end_date", (q) => q.eq("status", "overdue"))
         .take(BATCH),
     ]);
-    const due = [...newlyOverdue, ...stillOverdue].filter(
-      (request) => request.lastReminderDate !== today,
+    const candidates = [...newlyOverdue, ...stillOverdue];
+    const pending = await Promise.all(
+      candidates.map(
+        async (request) =>
+          request.lastReminderDate !== today ||
+          !(await delivered(ctx, request._id, today)),
+      ),
     );
+    const due = candidates.filter((_, index) => pending[index]);
     return await Promise.all(
       due.map(async (request) => {
         const [tool, owner, borrower] = await Promise.all([
@@ -45,9 +70,12 @@ export const listDue = internalQuery({
   },
 });
 
-// Claims a day's reminder for a loan and flips it to overdue. Only the first
-// call for a loan and day returns `claimed: true`, so a retried or re-run
-// workflow never sends a second reminder for the same day.
+// Claims a day's reminder for a loan and flips it to overdue. Once n8n has
+// reported the delivery, further claims for that day are refused, so a re-run
+// sends nothing. Until then the same day's claim can be taken again
+// ("resumed"): if the claim was stored but its response never reached n8n,
+// or the send failed, the retry still sends. That is at-least-once delivery:
+// a rare duplicate is possible, a silently skipped reminder is not.
 // A loan returned in the meantime is left alone.
 export const claimReminder = internalMutation({
   args: { requestId: v.string(), runDate: v.string() },
@@ -61,7 +89,13 @@ export const claimReminder = internalMutation({
       request.lastReminderDate !== undefined &&
       request.lastReminderDate >= runDate
     ) {
-      return { claimed: false, result: "already_claimed" as const };
+      const resumable =
+        request.lastReminderDate === runDate &&
+        request.status === "overdue" &&
+        !(await delivered(ctx, request._id, runDate));
+      return resumable
+        ? { claimed: true, result: "resumed" as const }
+        : { claimed: false, result: "already_claimed" as const };
     }
     if (request.status === "accepted" && request.endDate < runDate) {
       await ctx.db.patch(request._id, {

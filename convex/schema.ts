@@ -37,7 +37,8 @@ export default defineSchema({
     starterFor: v.optional(v.id("users")),
   })
     .index("by_owner", ["ownerId"])
-    .index("by_deleted_category", ["deletedAt", "category"]),
+    .index("by_deleted_category", ["deletedAt", "category"])
+    .index("by_image", ["imageStorageId"]),
 
   requests: defineTable({
     toolId: v.id("tools"),

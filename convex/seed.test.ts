@@ -58,6 +58,17 @@ describe("demo deployment", () => {
     expect(members.page.map((user) => user.email)).toContain("admin@example.com");
   });
 
+  it.each(["false", "0", "TRUE", "yes"])("stays off when DEMO_MODE is %s", async (value) => {
+    vi.stubEnv("DEMO_MODE", value);
+    const { t, addUser, counts } = await setup();
+    await addUser("member");
+    expect(await t.action(internal.seed.resetDemo, {})).toBe(
+      "Not a demo deployment. Nothing was changed.",
+    );
+    await expect(t.mutation(internal.seed.wipe, {})).rejects.toThrow("Refusing to wipe");
+    expect((await counts()).users).toEqual(["member"]);
+  });
+
   it("reset wipes accounts, listings, loans and files and restores the board", async () => {
     vi.stubEnv("DEMO_MODE", "true");
     const { t, addUser, addTool, addRequest, counts } = await setup();

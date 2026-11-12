@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { internal } from "./_generated/api";
+import { reminderKey } from "./overdue";
 import { createBackend, dayOffset } from "./test.setup";
 
 const today = dayOffset(0);
@@ -8,12 +9,19 @@ const tomorrow = dayOffset(1);
 
 async function setup() {
   const backend = createBackend();
+  // What n8n reports once a reminder has gone out.
+  const recordDelivery = (requestId: string, runDate: string) =>
+    backend.t.mutation(internal.automation.record, {
+      requestId,
+      kind: "reminder_sent",
+      key: reminderKey(requestId, runDate),
+    });
   const owner = await backend.addUser("owner");
   const borrower = await backend.addUser("borrower");
   const toolId = await backend.addTool(owner.userId, { status: "on_loan" });
   const loan = (overrides: Parameters<typeof backend.addRequest>[3]) =>
     backend.addRequest(toolId, owner.userId, borrower.userId, overrides);
-  return { ...backend, owner, borrower, toolId, loan };
+  return { ...backend, owner, borrower, toolId, loan, recordDelivery };
 }
 
 describe("overdue.listDue", () => {
@@ -37,8 +45,13 @@ describe("overdue.listDue", () => {
   });
 
   it("excludes loans already reminded today but not those reminded yesterday", async () => {
-    const { t, loan } = await setup();
-    await loan({ status: "overdue", endDate: dayOffset(-3), lastReminderDate: today });
+    const { t, loan, recordDelivery } = await setup();
+    const done = await loan({
+      status: "overdue",
+      endDate: dayOffset(-3),
+      lastReminderDate: today,
+    });
+    await recordDelivery(done, today);
     const pending = await loan({
       status: "overdue",
       endDate: dayOffset(-3),
@@ -46,6 +59,17 @@ describe("overdue.listDue", () => {
     });
     const due = await t.query(internal.overdue.listDue, { today });
     expect(due.map((d) => d.requestId)).toEqual([pending]);
+  });
+
+  it("keeps a loan that was claimed today but has no delivery on record", async () => {
+    const { t, loan } = await setup();
+    const stranded = await loan({
+      status: "overdue",
+      endDate: dayOffset(-3),
+      lastReminderDate: today,
+    });
+    const due = await t.query(internal.overdue.listDue, { today });
+    expect(due.map((d) => d.requestId)).toEqual([stranded]);
   });
 
   it("returns only the fields the webhook needs", async () => {
@@ -80,24 +104,54 @@ describe("overdue.claimReminder", () => {
     expect(doc).toMatchObject({ status: "overdue", lastReminderDate: today });
   });
 
-  it("refuses a second claim for the same request and run date", async () => {
-    const { t, loan } = await setup();
+  it("refuses a second claim once the day's reminder has been delivered", async () => {
+    const { t, loan, recordDelivery } = await setup();
     const requestId = await loan({ status: "accepted", endDate: yesterday });
     const args = { requestId, runDate: today };
     await t.mutation(internal.overdue.claimReminder, args);
+    await recordDelivery(requestId, today);
     expect(await t.mutation(internal.overdue.claimReminder, args)).toEqual({
       claimed: false,
       result: "already_claimed",
     });
   });
 
-  it("does not let a stale run date reopen a newer claim", async () => {
+  // The claim was stored but its response never reached n8n, or the send
+  // failed afterwards: the retry must still be allowed to send.
+  it("lets the same day's claim be resumed until delivery is recorded", async () => {
     const { t, loan } = await setup();
+    const requestId = await loan({ status: "accepted", endDate: yesterday });
+    const args = { requestId, runDate: today };
+    expect(await t.mutation(internal.overdue.claimReminder, args)).toEqual({
+      claimed: true,
+      result: "marked_overdue",
+    });
+    expect(await t.mutation(internal.overdue.claimReminder, args)).toEqual({
+      claimed: true,
+      result: "resumed",
+    });
+  });
+
+  it("does not resume a claim on a loan returned in the meantime", async () => {
+    const { t, loan } = await setup();
+    const requestId = await loan({
+      status: "returned",
+      endDate: dayOffset(-3),
+      lastReminderDate: today,
+    });
+    expect(
+      await t.mutation(internal.overdue.claimReminder, { requestId, runDate: today }),
+    ).toEqual({ claimed: false, result: "already_claimed" });
+  });
+
+  it("does not let a stale run date reopen a newer claim", async () => {
+    const { t, loan, recordDelivery } = await setup();
     const requestId = await loan({
       status: "overdue",
       endDate: dayOffset(-4),
       lastReminderDate: today,
     });
+    await recordDelivery(requestId, today);
     expect(
       await t.mutation(internal.overdue.claimReminder, { requestId, runDate: yesterday }),
     ).toEqual({ claimed: false, result: "already_claimed" });

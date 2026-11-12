@@ -9,6 +9,7 @@ import {
   internalMutation,
   internalQuery,
 } from "./_generated/server";
+import { isDemo } from "./lib/demo";
 import type { Category, Condition } from "./lib/domain";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -79,7 +80,7 @@ export const demo = internalAction({
 });
 
 // The two functions below are for a public demo deployment only, and do
-// nothing unless DEMO_MODE is set on it (DEMO_PHOTOS_FROM is the app's public
+// nothing unless DEMO_MODE is exactly "true" on it (DEMO_PHOTOS_FROM is the app's public
 // URL). `resetDemo` runs daily from convex/crons.ts: it wipes every account,
 // listing, loan and uploaded file and puts the neighbours' board back.
 // `welcome` is scheduled by users.store for each new account, and gives it
@@ -87,7 +88,7 @@ export const demo = internalAction({
 export const resetDemo = internalAction({
   args: {},
   handler: async (ctx): Promise<string> => {
-    if (!process.env.DEMO_MODE) return "Not a demo deployment. Nothing was changed.";
+    if (!isDemo()) return "Not a demo deployment. Nothing was changed.";
     await ctx.runMutation(internal.seed.wipe, {});
     await ctx.runMutation(internal.seed.board, {
       photos: await storePhotos(ctx, BOARD, process.env.DEMO_PHOTOS_FROM),
@@ -99,7 +100,7 @@ export const resetDemo = internalAction({
 export const welcome = internalAction({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }) => {
-    if (!process.env.DEMO_MODE) return;
+    if (!isDemo()) return;
     await ctx.runMutation(internal.seed.kit, {
       userId,
       photos: await storePhotos(ctx, KIT, process.env.DEMO_PHOTOS_FROM),
@@ -210,6 +211,7 @@ export const kit = internalMutation({
 export const wipe = internalMutation({
   args: {},
   handler: async (ctx) => {
+    if (!isDemo()) throw new Error("Refusing to wipe: not a demo deployment.");
     for (const table of ["automationEvents", "requests", "tools", "adminAuditLog", "users"] as const) {
       for (const row of await ctx.db.query(table).collect()) {
         await ctx.db.delete(row._id);

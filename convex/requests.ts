@@ -42,7 +42,12 @@ export const create = mutation({
     }
 
     const tool = await ctx.db.get(args.toolId);
-    if (!tool || tool.deletedAt !== undefined) {
+    if (
+      !tool ||
+      tool.deletedAt !== undefined ||
+      // Demo starter tools exist only for the account they were made for.
+      (tool.starterFor && tool.starterFor !== user._id)
+    ) {
       throw new ConvexError("Listing not found.");
     }
     if (tool.ownerId === user._id) {

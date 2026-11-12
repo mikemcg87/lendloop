@@ -23,6 +23,10 @@ import {
 
 type Tool = FunctionReturnType<typeof api.tools.browse>[number];
 
+const AVAILABILITY = { "On the shelf": "available", "Out on loan": "on_loan" } as const;
+type Availability = keyof typeof AVAILABILITY;
+const AVAILABILITIES = Object.keys(AVAILABILITY) as Availability[];
+
 export function ToolThumb({ url, name }: { url: string | null; name: string }) {
   if (!url) return null;
   return (
@@ -36,7 +40,15 @@ export function ToolThumb({ url, name }: { url: string | null; name: string }) {
   );
 }
 
-function RequestForm({ tool, onDone }: { tool: Tool; onDone: () => void }) {
+function RequestForm({
+  tool,
+  onDone,
+  onSent,
+}: {
+  tool: Tool;
+  onDone: () => void;
+  onSent: () => void;
+}) {
   const createRequest = useMutation(api.requests.create);
   const { run, error, pending } = useRun();
   const today = new Date().toLocaleDateString("en-CA");
@@ -51,7 +63,10 @@ function RequestForm({ tool, onDone }: { tool: Tool; onDone: () => void }) {
         const ok = await run(() =>
           createRequest({ toolId: tool._id, startDate, endDate }),
         );
-        if (ok) onDone();
+        if (ok) {
+          onSent();
+          onDone();
+        }
       }}
     >
       <p className="italic">
@@ -99,10 +114,11 @@ function RequestForm({ tool, onDone }: { tool: Tool; onDone: () => void }) {
 
 function ToolRow({ tool }: { tool: Tool }) {
   const [requesting, setRequesting] = useState(false);
+  const [sent, setSent] = useState(false);
   const owner = tool.owner?.name ?? "a neighbour";
   return (
     <>
-      <tr className={requesting ? "" : ledgerRow}>
+      <tr className={requesting || sent ? "" : ledgerRow}>
         <td className="py-3 pr-4">
           <div className="flex items-start gap-3">
             <ToolThumb url={tool.imageUrl} name={tool.name} />
@@ -119,6 +135,7 @@ function ToolRow({ tool }: { tool: Tool }) {
                 <span className="sm:hidden">
                   {" "}
                   · {tool.isMine ? "yours" : owner}
+                  {tool.owner?.trustedLender && <Trusted />}
                   {!tool.available && " · out on loan"}
                 </span>
               </p>
@@ -143,7 +160,10 @@ function ToolRow({ tool }: { tool: Tool }) {
                 <span className={`${meta} mr-3 hidden sm:inline`}>out on loan</span>
               )}
               <button
-                onClick={() => setRequesting(true)}
+                onClick={() => {
+                  setSent(false);
+                  setRequesting(true);
+                }}
                 aria-expanded={requesting}
                 className={linkAction}
               >
@@ -156,7 +176,19 @@ function ToolRow({ tool }: { tool: Tool }) {
       {requesting && (
         <tr className={ledgerRow}>
           <td colSpan={3} className="pb-4">
-            <RequestForm tool={tool} onDone={() => setRequesting(false)} />
+            <RequestForm
+              tool={tool}
+              onDone={() => setRequesting(false)}
+              onSent={() => setSent(true)}
+            />
+          </td>
+        </tr>
+      )}
+      {sent && !requesting && (
+        <tr className={ledgerRow}>
+          <td colSpan={3} role="status" className={`${meta} pb-3`}>
+            Request sent to {owner}. It is under My requests, where you can
+            withdraw it.
           </td>
         </tr>
       )}
@@ -166,28 +198,43 @@ function ToolRow({ tool }: { tool: Tool }) {
 
 export function BrowseTools() {
   const [category, setCategory] = useState<Category | undefined>();
-  const tools = useQuery(api.tools.browse, { category });
+  const [availability, setAvailability] = useState<Availability | undefined>();
+  const tools = useQuery(api.tools.browse, {
+    category,
+    availability: availability && AVAILABILITY[availability],
+  });
 
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <h2 className="text-base italic text-ink-soft">Everything on the board</h2>
-        <label className={`${meta} flex items-center gap-2`}>
-          Category
-          <Select
-            value={category}
-            onChange={setCategory}
-            options={CATEGORIES}
-            allLabel="All"
-          />
-        </label>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          <label className={`${meta} flex items-center gap-2`}>
+            Category
+            <Select
+              value={category}
+              onChange={setCategory}
+              options={CATEGORIES}
+              allLabel="All"
+            />
+          </label>
+          <label className={`${meta} flex items-center gap-2`}>
+            Availability
+            <Select
+              value={availability}
+              onChange={setAvailability}
+              options={AVAILABILITIES}
+              allLabel="All"
+            />
+          </label>
+        </div>
       </div>
       {tools === undefined ? (
         <Note>Fetching the board…</Note>
       ) : tools.length === 0 ? (
         <Note>
-          {category
-            ? "Nobody has listed anything in this category yet."
+          {category || availability
+            ? "Nothing on the board matches those filters."
             : "The board is empty. List the first tool under My listings."}
         </Note>
       ) : (

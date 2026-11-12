@@ -22,7 +22,7 @@ These are not read from `.env.local`; they live on the Convex deployment.
 | `CLERK_JWT_ISSUER_DOMAIN` | Yes | Issuer of the Clerk `convex` JWT template |
 | `N8N_WEBHOOK_SECRET` | For n8n | Shared HMAC secret |
 | `N8N_NOTIFY_WEBHOOK_URL` | For n8n | Production URL of workflow 1's webhook |
-| `DEMO_MODE` | Public demo only | Any value turns on three things: a daily reset that wipes every account, listing, loan and uploaded file and restores the demo board; a starter overdue loan and incoming request for each new account; and hiding member emails from admins. Never set it on a deployment with real data |
+| `DEMO_MODE` | Public demo only | Exactly `true` turns on three things (any other value is off): a daily reset that wipes every account, listing, loan and uploaded file and restores the demo board; a starter overdue loan and incoming request for each new account; and hiding member emails from admins. Never set it on a deployment with real data |
 | `DEMO_PHOTOS_FROM` | Public demo only | The app's public URL, where the demo photos are fetched from |
 
 Without the two n8n variables the app still works: notifications are skipped with a log line and the `/n8n/*` endpoints answer 503.
@@ -54,7 +54,7 @@ Implemented in [`convex/lib/auth.ts`](../convex/lib/auth.ts).
 | Remove any listing | `admin.removeListing` | Admin |
 | Mark / unmark Trusted Lender | `admin.setTrustedLender` | Admin |
 
-Every status change a person makes goes through `setRequestStatus` in [`convex/lib/loans.ts`](../convex/lib/loans.ts), which updates the request, keeps the tool's availability in step and queues the notification in one transaction. The one change no person makes, accepted to overdue, happens in `overdue.claimReminder` when the daily n8n job claims its first reminder; the reminder itself is the notification.
+Every status change a person makes goes through `setRequestStatus` in [`convex/lib/loans.ts`](../convex/lib/loans.ts), which updates the request, keeps the tool's availability in step and queues the notification in one transaction. The one change no person makes, accepted to overdue, happens in `overdue.claimReminder` when the daily n8n job claims its first reminder; the reminder itself is the notification. Until that job runs, the app shows a loan past its due date as overdue anyway, and the admin filter treats it as such.
 
 Loan states:
 
@@ -83,7 +83,7 @@ All three require a valid signature and answer 401 without one.
 | Endpoint | Body | Response |
 | --- | --- | --- |
 | `GET /n8n/overdue-loans` | none | `{ loans: [{ requestId, runDate, endDate, toolName, ownerName, borrower: { name, email } }] }` |
-| `POST /n8n/claim-reminder` | `{ requestId, runDate }` | `{ claimed, result }` where `result` is `marked_overdue`, `still_overdue`, `already_claimed`, `not_overdue` or `not_found` |
+| `POST /n8n/claim-reminder` | `{ requestId, runDate }` | `{ claimed, result }` where `result` is `marked_overdue`, `still_overdue`, `resumed` (claimed earlier today, no delivery recorded yet), `already_claimed`, `not_overdue` or `not_found` |
 | `POST /n8n/activity` | `{ requestId, kind, key, status? }` | `{ result }`: `recorded`, `already_recorded` or `not_found` |
 
 ## Webhook payload (Convex → n8n)

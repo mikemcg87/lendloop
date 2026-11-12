@@ -144,14 +144,16 @@ export function ConfirmAction({
     );
   }
   return (
-    <span className={`${mono} inline-flex items-center gap-3`}>
+    <span
+      className={`${mono} inline-flex flex-wrap items-center justify-end gap-x-3 gap-y-1`}
+    >
       <button
         disabled={disabled}
         onClick={() => {
           setAsking(false);
           onConfirm();
         }}
-        className={linkDanger}
+        className={`${linkDanger} whitespace-nowrap`}
       >
         {confirmLabel}
       </button>
@@ -191,8 +193,9 @@ export function formatDay(value: string | number) {
   return date.toLocaleDateString("en-GB", dayFormat);
 }
 
-// Whole days past a YYYY-MM-DD due date (0 if not yet due).
+// Whole days past a YYYY-MM-DD due date (0 if not yet due). Counted in UTC,
+// the same cutoff the overdue job and the admin filter use.
 export function daysPast(isoDate: string) {
-  const due = new Date(`${isoDate}T00:00:00`).getTime();
+  const due = new Date(`${isoDate}T00:00:00Z`).getTime();
   return Math.max(0, Math.floor((Date.now() - due) / DAY_MS));
 }

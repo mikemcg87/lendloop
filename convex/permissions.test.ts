@@ -369,6 +369,68 @@ describe("users.store", () => {
   });
 });
 
+describe("admin listings and loan filters", () => {
+  it("lists every live listing to admins only", async () => {
+    const { owner, admin, stranger, toolId, t } = await setup();
+    await t.run((ctx) => ctx.db.patch(toolId, { starterFor: owner.userId }));
+    const listings = await admin.as.query(api.admin.listListings, { paginationOpts: page });
+    expect(listings.page.map((tool) => tool._id)).toEqual([toolId]);
+    expect(
+      await errorMessage(stranger.as.query(api.admin.listListings, { paginationOpts: page })),
+    ).toBe("Admin access required.");
+  });
+
+  it("treats an accepted loan past its due date as overdue, not on loan", async () => {
+    const { owner, borrower, admin, toolId, addRequest } = await setup();
+    const late = await addRequest(toolId, owner.userId, borrower.userId, {
+      status: "accepted",
+      startDate: dayOffset(-5),
+      endDate: dayOffset(-2),
+    });
+    const marked = await addRequest(toolId, owner.userId, borrower.userId, {
+      status: "overdue",
+      startDate: dayOffset(-9),
+      endDate: dayOffset(-6),
+    });
+    const current = await addRequest(toolId, owner.userId, borrower.userId, {
+      status: "accepted",
+      endDate: dayOffset(2),
+    });
+    const ids = async (status: "overdue" | "accepted") =>
+      (
+        await admin.as.query(api.admin.listLoans, { paginationOpts: page, status })
+      ).page.map((loan) => loan._id);
+    expect((await ids("overdue")).sort()).toEqual([late, marked].sort());
+    expect(await ids("accepted")).toEqual([current]);
+  });
+});
+
+describe("board filters", () => {
+  it("filters the signed-in board by availability", async () => {
+    const { owner, stranger, addTool } = await setup();
+    await addTool(owner.userId, { name: "Out", status: "on_loan" });
+    const names = async (availability?: "available" | "on_loan") =>
+      (await stranger.as.query(api.tools.browse, { availability })).map((tool) => tool.name);
+    expect(await names("on_loan")).toEqual(["Out"]);
+    expect(await names("available")).toEqual(["Cordless drill"]);
+    expect(await names()).toHaveLength(2);
+  });
+
+  it("refuses a request for another account's starter tool", async () => {
+    const { owner, borrower, toolId, t } = await setup();
+    await t.run((ctx) => ctx.db.patch(toolId, { starterFor: owner.userId }));
+    expect(
+      await errorMessage(
+        borrower.as.mutation(api.requests.create, {
+          toolId,
+          startDate: dayOffset(1),
+          endDate: dayOffset(2),
+        }),
+      ),
+    ).toBe("Listing not found.");
+  });
+});
+
 describe("email privacy", () => {
   it("keeps email addresses out of ordinary and admin loan views", async () => {
     const { owner, borrower, stranger, admin, toolId, addRequest } = await setup();
@@ -402,6 +464,19 @@ describe("tools.create photo validation", () => {
     expect(
       await errorMessage(owner.as.mutation(api.tools.create, { ...fields, imageStorageId })),
     ).toBe("The photo must be an image file.");
+  });
+
+  it("rejects a photo that is already on someone else's listing", async () => {
+    const { t, owner, stranger } = await setup();
+    const imageStorageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["x"], { type: "image/png" })),
+    );
+    await owner.as.mutation(api.tools.create, { ...fields, imageStorageId });
+    expect(
+      await errorMessage(stranger.as.mutation(api.tools.create, { ...fields, imageStorageId })),
+    ).toBe("Photo upload not found.");
+    // The owner can reuse their own photo on another listing.
+    await owner.as.mutation(api.tools.create, { ...fields, name: "Second saw", imageStorageId });
   });
 
   it("accepts a stored image", async () => {

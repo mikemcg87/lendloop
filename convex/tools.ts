@@ -15,9 +15,20 @@ const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 
 // The upload URL accepts any file, so check what actually arrived before a
 // listing is allowed to point at it.
-async function assertImage(ctx: QueryCtx, storageId: Id<"_storage">) {
+async function assertImage(
+  ctx: QueryCtx,
+  storageId: Id<"_storage">,
+  userId: Id<"users">,
+) {
   const file = await ctx.db.system.get(storageId);
-  if (!file) throw new ConvexError("Photo upload not found.");
+  // A photo already on someone else's listing cannot be attached to yours.
+  const usedElsewhere = await ctx.db
+    .query("tools")
+    .withIndex("by_image", (q) => q.eq("imageStorageId", storageId))
+    .collect();
+  if (!file || usedElsewhere.some((tool) => tool.ownerId !== userId)) {
+    throw new ConvexError("Photo upload not found.");
+  }
   if (!file.contentType?.startsWith("image/")) {
     throw new ConvexError("The photo must be an image file.");
   }
@@ -41,15 +52,29 @@ function cleanFields(name: string, description: string) {
   return { name: trimmedName, description: trimmedDescription };
 }
 
-function activeTools(ctx: QueryCtx, category?: Category) {
+const availabilityValidator = v.union(
+  v.literal("available"),
+  v.literal("on_loan"),
+);
+
+function activeTools(
+  ctx: QueryCtx,
+  category?: Category,
+  availability?: "available" | "on_loan",
+) {
   // deletedAt is absent on live listings; Convex indexes treat a missing
   // field as `undefined`, so this selects everything not soft-deleted.
-  return ctx.db
+  const live = ctx.db
     .query("tools")
     .withIndex("by_deleted_category", (q) => {
       const live = q.eq("deletedAt", undefined);
       return category ? live.eq("category", category) : live;
-    })
+    });
+  return (
+    availability
+      ? live.filter((q) => q.eq(q.field("status"), availability))
+      : live
+  )
     .order("desc")
     .take(200);
 }
@@ -103,10 +128,13 @@ async function withDetails(ctx: QueryCtx, tool: Doc<"tools">) {
 
 // Signed-in browse view with full details.
 export const browse = query({
-  args: { category: v.optional(categoryValidator) },
+  args: {
+    category: v.optional(categoryValidator),
+    availability: v.optional(availabilityValidator),
+  },
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
-    const tools = await activeTools(ctx, args.category);
+    const tools = await activeTools(ctx, args.category, args.availability);
     return await Promise.all(
       tools
         .filter((tool) => !tool.starterFor || tool.starterFor === user._id)
@@ -153,7 +181,9 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
-    if (args.imageStorageId) await assertImage(ctx, args.imageStorageId);
+    if (args.imageStorageId) {
+      await assertImage(ctx, args.imageStorageId, user._id);
+    }
     return await ctx.db.insert("tools", {
       ownerId: user._id,
       ...cleanFields(args.name, args.description),
@@ -190,7 +220,9 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const session = await requireUser(ctx);
     const tool = await getOwnedTool(ctx, session, args.toolId);
-    if (args.imageStorageId) await assertImage(ctx, args.imageStorageId);
+    if (args.imageStorageId) {
+      await assertImage(ctx, args.imageStorageId, session.user._id);
+    }
     await ctx.db.patch(tool._id, {
       ...cleanFields(args.name, args.description),
       category: args.category,

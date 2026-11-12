@@ -161,6 +161,10 @@ function ListingRow({ tool, onEdit }: { tool: Tool; onEdit: () => void }) {
             {tool.name}
             <p className={meta}>
               {tool.category} · {tool.condition.toLowerCase()}
+              <span className="sm:hidden">
+                {" "}
+                · {tool.available ? "on the shelf" : "out on loan"}
+              </span>
             </p>
             {tool.description && (
               <p className="mt-1 text-[15px] text-ink-soft">{tool.description}</p>
@@ -169,11 +173,11 @@ function ListingRow({ tool, onEdit }: { tool: Tool; onEdit: () => void }) {
           </div>
         </div>
       </td>
-      <td className={`${meta} py-3 pr-4 align-top whitespace-nowrap`}>
+      <td className={`${meta} hidden py-3 pr-4 align-top whitespace-nowrap sm:table-cell`}>
         {tool.available ? "on the shelf" : "out on loan"}
       </td>
-      <td className="py-3 text-right align-top whitespace-nowrap">
-        <span className="inline-flex items-center gap-4">
+      <td className="py-3 text-right align-top">
+        <span className="inline-flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
           <button onClick={onEdit} className={linkAction}>
             amend
           </button>
@@ -225,7 +229,7 @@ export function MyListings() {
             <thead>
               <tr>
                 <th className={columnHead}>Tool</th>
-                <th className={columnHead}>Where</th>
+                <th className={`${columnHead} hidden sm:table-cell`}>Where</th>
                 <th className={columnHead}>
                   <span className="sr-only">Actions</span>
                 </th>

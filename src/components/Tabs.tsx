@@ -12,7 +12,7 @@ export function Tabs<T extends string>({
   return (
     <div
       role="tablist"
-      className="flex gap-6 overflow-x-auto border-b border-ink/20 pb-3 font-mono text-[13px]"
+      className="flex flex-wrap gap-x-6 gap-y-2 border-b border-ink/20 pb-3 font-mono text-[13px]"
     >
       {tabs.map((tab) => (
         <button

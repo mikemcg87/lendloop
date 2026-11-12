@@ -90,11 +90,18 @@ function Loans() {
 }
 
 function Listings() {
-  const tools = useQuery(api.tools.browse, {});
+  const listings = usePaginatedQuery(
+    api.admin.listListings,
+    {},
+    { initialNumItems: PAGE_SIZE },
+  );
   const removeListing = useMutation(api.admin.removeListing);
   const { run, error, pending } = useRun();
+  const tools = listings.results;
 
-  if (tools === undefined) return <Note>Fetching listings…</Note>;
+  if (listings.status === "LoadingFirstPage") {
+    return <Note>Fetching listings…</Note>;
+  }
   if (tools.length === 0) return <Note>No listings.</Note>;
   return (
     <section className="space-y-3">
@@ -104,7 +111,7 @@ function Listings() {
           <tr>
             <th className={columnHead}>Tool</th>
             <th className={columnHead}>Kept by</th>
-            <th className={columnHead}>Where</th>
+            <th className={`${columnHead} hidden sm:table-cell`}>Where</th>
             <th className={columnHead}>
               <span className="sr-only">Actions</span>
             </th>
@@ -121,10 +128,12 @@ function Listings() {
                 {tool.owner?.name}
                 {tool.owner?.trustedLender && <Trusted />}
               </td>
-              <td className={`${meta} py-2.5 pr-4 align-top whitespace-nowrap`}>
+              <td
+                className={`${meta} hidden py-2.5 pr-4 align-top whitespace-nowrap sm:table-cell`}
+              >
                 {tool.available ? "on the shelf" : "out on loan"}
               </td>
-              <td className="py-2.5 text-right align-top whitespace-nowrap">
+              <td className="py-2.5 text-right align-top">
                 <ConfirmAction
                   label="remove"
                   confirmLabel="yes, remove"
@@ -138,6 +147,7 @@ function Listings() {
           ))}
         </tbody>
       </table>
+      <LoadMore status={listings.status} loadMore={listings.loadMore} />
     </section>
   );
 }
